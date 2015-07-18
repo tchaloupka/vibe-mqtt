@@ -27,5 +27,205 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module message;
+module mqttd.message;
+
+/**
+ * MQTT Control Packet type
+ * 
+ * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.1_-
+ */
+enum PacketType : byte
+{
+    /// Forbidden - Reserved
+    RESERVED1   = 0,
+    /// Client -> Server - Client request to connect to Server
+    CONNECT     = 1,
+    /// Server -> Client - Connect acknowledgment
+    CONNACK     = 2,
+    /// Publish message
+    PUBLISH     = 3,
+    /// Publish acknowledgment
+    PUBACK      = 4,
+    /// Publish received (assured delivery part 1)
+    PUBREC      = 5,
+    /// Publish release (assured delivery part 2)
+    PUBREL      = 6,
+    /// Publish complete (assured delivery part 3)
+    PUBCOMP     = 7,
+    /// Client -> Server - Client subscribe request
+    SUBSCRIBE   = 8,
+    /// Server -> Client - Subscribe acknowledgment
+    SUBACK      = 9,
+    /// Client -> Server - Unsubscribe request
+    UNSUBSCRIBE = 10,
+    /// Server -> Client - Unsubscribe acknowledgment
+    UNSUBACK    = 11,
+    /// Client -> Server - PING request
+    PINGREQ     = 12,
+    /// Server -> Client - PING response
+    PINGRESP    = 13,
+    /// Client -> Server - Client is disconnecting
+    DISCONNECT  = 14,
+    /// Forbidden - Reserved
+    RESERVED2   = 15
+}
+
+/**
+ * Indicates the level of assurance for delivery of an Application Message
+ * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_3.11_-
+ */
+enum QoSLevel : byte
+{
+    /// At most once delivery
+    AtMostOnce = 0x0,
+    /// At least once delivery
+    AtLeastOnce = 0x1,
+    /// Exactly once delivery
+    ExactlyOnce = 0x2,
+    /// Reserved – must not be used
+    Reserved = 0x3
+}
+
+/**
+ * Each MQTT Control Packet contains a fixed header.
+ * 
+ * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Figure_2.2_-
+ */
+mixin template FixedHeader(alias f)
+{
+    /// Represented as a 4-bit unsigned value
+    PacketType type;
+
+    /// The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
+    @property byte flags() { return f; };
+
+    /**
+     * The Remaining Length is the number of bytes remaining within the current packet, 
+     * including data in the variable header and the payload. 
+     * The Remaining Length does not include the bytes used to encode the Remaining Length.
+     */
+    int remainingLength;
+
+    @property byte headerBytes()
+    {
+        //TODO
+        return 0;
+    }
+}
+
+struct Connect
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+
+}
+
+struct ConnAck
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+
+}
+
+/**
+ * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
+ * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
+ */
+struct PublishFlags
+{
+    /// Duplicate delivery of a PUBLISH Control Packet
+    bool dup;
+
+    QoSLevel qos;
+
+    /// PUBLISH Retain flag 
+    bool retain;
+
+    @property byte flags()
+    {
+        return cast(byte)((dup ? 0x8 : 0x0) | (retain ? 0x1 : 0x0) | (qos << 1));
+    }
+
+    alias flags this;
+
+    unittest
+    {
+        assert(PublishFlags(1, QoSLevel.Reserved, 1) == 0x0F);
+    }
+}
+
+struct Publish
+{
+    mixin FixedHeader!(pubFlags);
+
+    PublishFlags pubFlags;
+}
+
+struct PubAck
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+
+}
+
+struct PubRect
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+
+}
+
+struct PubRel
+{
+    mixin FixedHeader!(0b0010); // Reserved
+
+}
+
+struct PubComp
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
+
+struct Subscribe
+{
+    mixin FixedHeader!(0b0010); // Reserved
+
+}
+
+struct SubAck
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
+
+struct Unsubscribe
+{
+    mixin FixedHeader!(0b0010); // Reserved
+
+}
+
+struct UnsubAck
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
+
+struct PingReq
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
+
+struct PingResp
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
+
+struct Disconnect
+{
+    mixin FixedHeader!(0b0000); // Reserved
+
+}
 

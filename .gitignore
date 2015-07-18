@@ -1,7 +1,9 @@
 .dub
 docs.json
 __dummy.html
+*.a
 *.o
 *.obj
 *.userprefs
 dub.selections.json
+__test__library__
