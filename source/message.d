@@ -29,12 +29,17 @@
  */
 module mqttd.message;
 
+version (unittest)
+{
+    import std.stdio;
+}
+
 /**
  * MQTT Control Packet type
  * 
  * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.1_-
  */
-enum PacketType : byte
+enum PacketType : ubyte
 {
     /// Forbidden - Reserved
     RESERVED1   = 0,
@@ -74,7 +79,7 @@ enum PacketType : byte
  * Indicates the level of assurance for delivery of an Application Message
  * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_3.11_-
  */
-enum QoSLevel : byte
+enum QoSLevel : ubyte
 {
     /// At most once delivery
     AtMostOnce = 0x0,
@@ -87,145 +92,251 @@ enum QoSLevel : byte
 }
 
 /**
+ * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
+ * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
+ */
+struct Flags
+{
+    import std.traits : isIntegral;
+
+    /// Duplicate delivery of a PUBLISH Control Packet
+    bool dup;
+
+    /// Quality Of Service for a message
+    QoSLevel qos;
+    
+    /// PUBLISH Retain flag 
+    bool retain;
+    
+    @property ubyte flags() const
+    {
+        return cast(ubyte)((dup ? 0x08 : 0x00) | (retain ? 0x01 : 0x00) | (qos << 1));
+    }
+    @property void flags(ubyte value)
+    {
+        dup = (value & 0x08) == 0x08;
+        retain = (value & 0x01) == 0x01;
+        qos = cast(QoSLevel)((value >> 1) & 0x03);
+    }
+
+    this(bool dup, QoSLevel qos, bool retain)
+    {
+        this.dup = dup;
+        this.retain = retain;
+        this.qos = qos;
+    }
+
+    this(T)(T value) if(isIntegral!T)
+    {
+        dup = (value & 0x08) == 0x08;
+        retain = (value & 0x01) == 0x01;
+        qos = cast(QoSLevel)((value >> 1) & 0x03);
+    }
+
+    alias flags this;
+    
+    unittest
+    {
+        assert(Flags(true, QoSLevel.Reserved, true) == 0x0F);
+        Flags flags = 0x0F;
+        assert(flags.dup);
+        assert(flags.retain);
+        assert(flags.qos == QoSLevel.Reserved);
+    }
+}
+
+/**
  * Each MQTT Control Packet contains a fixed header.
  * 
  * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Figure_2.2_-
  */
-mixin template FixedHeader(alias f)
+struct FixedHeader
 {
+    import std.range;
+
     /// Represented as a 4-bit unsigned value
     PacketType type;
 
     /// The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
-    @property byte flags() { return f; };
+    Flags flags;
 
     /**
      * The Remaining Length is the number of bytes remaining within the current packet, 
      * including data in the variable header and the payload. 
      * The Remaining Length does not include the bytes used to encode the Remaining Length.
      */
-    int remainingLength;
+    int length;
 
-    @property byte headerBytes()
+    void toBytes(scope void delegate(ubyte) sink) const
     {
-        //TODO
-        return 0;
+        sink(cast(ubyte)(type << 4 | flags));
+
+        int tmp = length;
+        do
+        {
+            byte digit = tmp % 128;
+            tmp /= 128;
+            if (tmp > 0) digit |= 0x80;
+            sink(digit);
+        } while (tmp > 0);
+    }
+
+    static FixedHeader fromBytes(R)(R range) if (isInputRange!R && is(ElementType!R == ubyte))
+    {
+        import std.exception;
+
+        FixedHeader header;
+
+        enforce(!range.empty);
+        ubyte first = range.front;
+        range.popFront();
+
+        header.type = cast(PacketType)(first >> 4);
+        header.flags = first;
+
+        int multiplier = 1;
+        ubyte digit;
+        do
+        {
+            enforce(!range.empty);
+            digit = range.front;
+            range.popFront();
+            header.length += ((digit & 127) * multiplier);
+            multiplier *= 128;
+        } while ((digit & 128) != 0);
+
+        return header;
+    }
+    
+    unittest
+    {
+        import std.array;
+
+        auto header = FixedHeader(PacketType.CONNECT, Flags(0x0F), 255);
+
+        auto bytes = appender!(ubyte[]);
+        header.toBytes(a => bytes.put(a));
+
+        assert(bytes.data.length == 3);
+        assert(bytes.data[0] == 0x1F);
+        assert(bytes.data[1] == 0xFF);
+        assert(bytes.data[2] == 0x01);
+
+        header.length = 10;
+        bytes.clear();
+        header.toBytes(a => bytes.put(a));
+        assert(bytes.data.length == 2);
+        assert(bytes.data[0] == 0x1F);
+        assert(bytes.data[1] == 0x0A);
+
+        header = FixedHeader.fromBytes(cast(ubyte[])[0x1F, 0x0A]);
+        assert(header.type == PacketType.CONNECT);
+        assert(header.flags == 0x0F);
+        assert(header.length == 10);
+
+        header = FixedHeader.fromBytes(cast(ubyte[])[0x20, 0x80, 0x02]);
+        assert(header.type == PacketType.CONNACK);
+        assert(header.flags == 0x00);
+        assert(header.length == 256);
     }
 }
 
 struct Connect
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+
+    FixedHeader header;
 
 
 }
 
 struct ConnAck
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags  = 0b0000; // Reserved
+    FixedHeader header;
 
-
-}
-
-/**
- * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
- * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
- */
-struct PublishFlags
-{
-    /// Duplicate delivery of a PUBLISH Control Packet
-    bool dup;
-
-    QoSLevel qos;
-
-    /// PUBLISH Retain flag 
-    bool retain;
-
-    @property byte flags()
-    {
-        return cast(byte)((dup ? 0x8 : 0x0) | (retain ? 0x1 : 0x0) | (qos << 1));
-    }
-
-    alias flags this;
-
-    unittest
-    {
-        assert(PublishFlags(1, QoSLevel.Reserved, 1) == 0x0F);
-    }
 }
 
 struct Publish
 {
-    mixin FixedHeader!(pubFlags);
+    FixedHeader header;
 
-    PublishFlags pubFlags;
 }
 
 struct PubAck
 {
-    mixin FixedHeader!(0b0000); // Reserved
-
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct PubRect
 {
-    mixin FixedHeader!(0b0000); // Reserved
-
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct PubRel
 {
-    mixin FixedHeader!(0b0010); // Reserved
+    enum flags = 0b0010; // Reserved
+    FixedHeader header;
 
 }
 
 struct PubComp
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct Subscribe
 {
-    mixin FixedHeader!(0b0010); // Reserved
+    enum flags = 0b0010; // Reserved
+    FixedHeader header;
 
 }
 
 struct SubAck
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct Unsubscribe
 {
-    mixin FixedHeader!(0b0010); // Reserved
+    enum flags = 0b0010; // Reserved
+    FixedHeader header;
 
 }
 
 struct UnsubAck
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct PingReq
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct PingResp
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
 struct Disconnect
 {
-    mixin FixedHeader!(0b0000); // Reserved
+    enum flags = 0b0000; // Reserved
+    FixedHeader header;
 
 }
 
