@@ -1,4 +1,6 @@
 mqtt-d
 =============
 
-[MQTT](http://public.dhe.ibm.com/software/dw/webservices/ws-mqtt/mqtt-v3r1.html) client written in D.
+[MQTT](file:///home/tomas/Documents/MQTT%20Version%203.1.1.html) client written in D.
+
+Version supported: 3.1.1
