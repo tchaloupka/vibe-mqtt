@@ -92,6 +92,17 @@ enum QoSLevel : ubyte
 }
 
 /**
+ * Exception thrown when package format is somehow malformed
+ */
+class PacketFormatException : Exception
+{
+    this(string msg = null, Throwable next = null)
+    {
+        super(msg, next);
+    }
+}
+
+/**
  * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
  * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
  */
@@ -203,6 +214,7 @@ struct FixedHeader
             range.popFront();
             header.length += ((digit & 127) * multiplier);
             multiplier *= 128;
+            if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
         } while ((digit & 128) != 0);
 
         return header;
