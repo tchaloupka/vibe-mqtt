@@ -63,14 +63,14 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
         res.num |= cast(ushort) (nextByte() << 8);
         res.num |= cast(ushort) nextByte();
     }
-    else static if (is(T == MqttString))
+    else static if (is(T == string))
     {
         import std.range : takeExactly;
         import std.array;
         import std.algorithm : map;
 
         auto length = deserialize!MqttShort(wrapped);
-        res.name = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
+        res = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
     }
     else static if (is(T == FixedHeader))
     {
@@ -198,16 +198,14 @@ unittest
     assert(id == 0x1122);
 }
 
-/// MqttString tests
+/// string tests
 unittest
 {
     import std.array;
     import std.string : representation;
     import std.range;
     
-    auto name = MqttString("test");
-    assert(name == "test");
-    
+    auto name = "test";
     auto bytes = appender!(ubyte[]);
     name.toBytes(a => bytes.put(a));
     
@@ -216,11 +214,11 @@ unittest
     assert(bytes.data[1] == 4);
     assert(bytes.data[2..$] == "test".representation);
     
-    name = deserialize!MqttString(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
+    name = deserialize!string(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
     assert(name == "randomname");
     
     auto range = inputRangeObject(cast(ubyte[])[0x00, 0x04] ~ "MQTT".representation);
-    name = deserialize!MqttString(range);
+    name = deserialize!string(range);
     assert(name == "MQTT");
 }
 

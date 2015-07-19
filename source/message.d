@@ -189,12 +189,6 @@ struct MqttShort
     alias num this;
 }
 
-struct MqttString
-{
-    string name;
-    alias name this;
-}
-
 /**
  * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
  * It also indicates the presence or absence of fields in the payload.
@@ -363,7 +357,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
 {
     static if (is(T == MqttByte)) return 1;
     else static if (is(T == MqttShort)) return 2;
-    else static if (is(T == MqttString)) return cast(uint)(2 + item.length);
+    else static if (is(T == string)) return cast(uint)(2 + item.length);
     else static if (is(T == ConnectFlags)) return 1;
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
@@ -410,14 +404,14 @@ void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
         sink(cast(ubyte) (item.num >> 8));
         sink(cast(ubyte) item.num);
     }
-    else static if (is(T == MqttString))
+    else static if (is(T == string))
     {
         import std.string : representation;
         
-        enforce(item.name.length <= 0xFF, "String too long: ", item.name);
+        enforce(item.length <= 0xFF, "String too long: ", item);
         
-        MqttShort(cast(ushort)item.name.length).toBytes(sink);
-        foreach(b; item.name.representation)
+        MqttShort(cast(ushort)item.length).toBytes(sink);
+        foreach(b; item.representation)
         {
             sink(b);
         }
@@ -477,7 +471,7 @@ struct Connect
     FixedHeader header;
 
     /// The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”
-    MqttString protocolName;
+    string protocolName;
 
     /**
      * The 8 bit unsigned value that represents the revision level of the protocol used by the Client.
@@ -519,19 +513,19 @@ struct Connect
     MqttShort keepAlive;
 
     /// Client Identifier
-    MqttString clientIdentifier;
+    string clientIdentifier;
 
     /// Will Topic
-    MqttString willTopic;
+    string willTopic;
 
     /// Will Message
-    MqttString willMessage;
+    string willMessage;
 
     /// User Name
-    MqttString userName;
+    string userName;
 
     /// Password
-    MqttString password;
+    string password;
 
     static Connect opCall()
     {
