@@ -34,6 +34,8 @@ version (unittest)
     import std.stdio;
 }
 
+enum ubyte MQTT_PROTOCOL_LEVEL_3_1_1 = 0x04;
+
 /**
  * MQTT Control Packet type
  * 
@@ -106,7 +108,7 @@ class PacketFormatException : Exception
  * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
  * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
  */
-struct Flags
+struct FixedHeaderFlags
 {
     import std.traits : isIntegral;
 
@@ -118,12 +120,15 @@ struct Flags
     
     /// PUBLISH Retain flag 
     bool retain;
-    
-    @property ubyte flags() const
+
+    @safe @nogc
+    @property ubyte flags() const pure nothrow
     {
         return cast(ubyte)((dup ? 0x08 : 0x00) | (retain ? 0x01 : 0x00) | (qos << 1));
     }
-    @property void flags(ubyte value)
+
+    @safe @nogc
+    @property void flags(ubyte value) pure nothrow
     {
         dup = (value & 0x08) == 0x08;
         retain = (value & 0x01) == 0x01;
@@ -139,17 +144,15 @@ struct Flags
 
     this(T)(T value) if(isIntegral!T)
     {
-        dup = (value & 0x08) == 0x08;
-        retain = (value & 0x01) == 0x01;
-        qos = cast(QoSLevel)((value >> 1) & 0x03);
+        this.flags = cast(ubyte)value;
     }
 
     alias flags this;
     
     unittest
     {
-        assert(Flags(true, QoSLevel.Reserved, true) == 0x0F);
-        Flags flags = 0x0F;
+        assert(FixedHeaderFlags(true, QoSLevel.Reserved, true) == 0x0F);
+        FixedHeaderFlags flags = 0x0F;
         assert(flags.dup);
         assert(flags.retain);
         assert(flags.qos == QoSLevel.Reserved);
@@ -170,7 +173,7 @@ struct FixedHeader
     PacketType type;
 
     /// The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
-    Flags flags;
+    FixedHeaderFlags flags;
 
     /**
      * The Remaining Length is the number of bytes remaining within the current packet, 
@@ -222,7 +225,7 @@ struct FixedHeader
     {
         import std.array;
 
-        auto header = FixedHeader(PacketType.CONNECT, Flags(0x0F), 255);
+        auto header = FixedHeader(PacketType.CONNECT, FixedHeaderFlags(0x0F), 255);
 
         auto bytes = appender!(ubyte[]);
         header.toBytes(a => bytes.put(a));
@@ -251,6 +254,65 @@ struct FixedHeader
     }
 }
 
+struct MqttByte
+{
+    import std.range;
+    import std.traits : isIntegral;
+    
+    ubyte num;
+    
+    alias num this;
+    
+    void toBytes(scope void delegate(ubyte) sink) const
+    {
+        sink(num);
+    }
+
+    @safe @nogc
+    static MqttByte fromBytes(R)(R range) 
+        if (isInputRange!R && isIntegral!(ElementType!R))
+    {
+        MqttByte res;
+        res.num = cast(ubyte)range.front;
+        range.popFront();
+        
+        return res;
+    }
+
+    //TODO: Does not work as expected: http://forum.dlang.org/post/bbihuuopxkcgembnbzrr@forum.dlang.org
+//    static MqttByte opCall(T)(T value) if (isIntegral!T)
+//    {
+//        MqttByte res;
+//        res.num = cast(ubyte)value;
+//        return res;
+//    }
+    
+    unittest
+    {
+        import std.array;
+        
+        auto id = MqttByte(10);
+        assert(id == 10);
+        
+        auto bytes = appender!(ubyte[]);
+        id.toBytes(a => bytes.put(a));
+        
+        assert(bytes.data.length == 1);
+        assert(bytes.data[0] == 0x0A);
+        
+        id = 0x2B;
+        bytes.clear();
+        
+        id.toBytes(a => bytes.put(a));
+        
+        assert(bytes.data.length == 1);
+        assert(bytes.data[0] == 0x2B);
+        
+        id = MqttByte.fromBytes([0x11]);
+        assert(id == 0x11);
+    }
+}
+
 struct MqttShort
 {
     import std.range;
@@ -265,7 +327,7 @@ struct MqttShort
         sink(cast(ubyte) (num >> 8));
         sink(cast(ubyte) num);
     }
-    
+
     static MqttShort fromBytes(R)(R range) 
         if (isInputRange!R && isIntegral!(ElementType!R))
     {
@@ -332,18 +394,16 @@ struct MqttString
     static MqttString fromBytes(R)(R range)
         if (isInputRange!R && isIntegral!(ElementType!R))
     {
-        import std.range : takeExactly, drop;
+        import std.range : takeExactly, drop, refRange;
         import std.array;
         import std.algorithm : map;
         import std.traits : isArray;
 
         MqttString res;
 
-        auto length = MqttShort.fromBytes(range);
-        if (isArray!R)
-            res.name = range.drop(2).takeExactly(length).map!(a => cast(immutable char)a).array;
-        else
-            res.name = range.takeExactly(length).map!(a => cast(immutable char)a).array;
+        auto wrapped = refRange(&range); // to avoid problems with consuming different types of range
+        auto length = MqttShort.fromBytes(wrapped);
+        res.name = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
 
         return res;
     }
@@ -375,6 +435,218 @@ struct MqttString
 }
 
 /**
+ * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
+ * It also indicates the presence or absence of fields in the payload.
+ */
+struct ConnectFlags
+{
+    import std.range;
+    import std.traits : isIntegral;
+
+    /**
+     * If the User Name Flag is set to 0, a user name MUST NOT be present in the payload.
+     * If the User Name Flag is set to 1, a user name MUST be present in the payload.
+     */
+    bool userName;
+
+    /**
+     * If the Password Flag is set to 0, a password MUST NOT be present in the payload.
+     * If the Password Flag is set to 1, a password MUST be present in the payload.
+     * If the User Name Flag is set to 0, the Password Flag MUST be set to 0.
+     */
+    bool password;
+
+    /**
+     * This bit specifies if the Will Message is to be Retained when it is published.
+     * 
+     * If the Will Flag is set to 0, then the Will Retain Flag MUST be set to 0.
+     * If the Will Flag is set to 1:
+     *      If Will Retain is set to 0, the Server MUST publish the Will Message as a non-retained message.
+     *      If Will Retain is set to 1, the Server MUST publish the Will Message as a retained message
+     */
+    bool willRetain;
+
+    /**
+     * Specify the QoS level to be used when publishing the Will Message.
+     * 
+     * If the Will Flag is set to 0, then the Will QoS MUST be set to 0 (0x00).
+     * If the Will Flag is set to 1, the value of Will QoS can be 0 (0x00), 1 (0x01), or 2 (0x02).
+     * It MUST NOT be 3 (0x03)
+     */
+    QoSLevel willQoS;
+
+    /**
+     * If the Will Flag is set to 1 this indicates that, if the Connect request is accepted, a Will Message MUST 
+     * be stored on the Server and associated with the Network Connection. The Will Message MUST be published 
+     * when the Network Connection is subsequently closed unless the Will Message has been deleted by the Server 
+     * on receipt of a DISCONNECT Packet.
+     * 
+     * Situations in which the Will Message is published include, but are not limited to:
+     *      An I/O error or network failure detected by the Server.
+     *      The Client fails to communicate within the Keep Alive time.
+     *      The Client closes the Network Connection without first sending a DISCONNECT Packet.
+     *      The Server closes the Network Connection because of a protocol error.
+     * 
+     * If the Will Flag is set to 1, the Will QoS and Will Retain fields in the Connect Flags will be used by 
+     * the Server, and the Will Topic and Will Message fields MUST be present in the payload.
+     * 
+     * The Will Message MUST be removed from the stored Session state in the Server once it has been published 
+     * or the Server has received a DISCONNECT packet from the Client.
+     * 
+     * If the Will Flag is set to 0 the Will QoS and Will Retain fields in the Connect Flags MUST be set to zero 
+     * and the Will Topic and Will Message fields MUST NOT be present in the payload.
+     * 
+     * If the Will Flag is set to 0, a Will Message MUST NOT be published when this Network Connection ends
+     */
+    bool will;
+
+    /**
+     * This bit specifies the handling of the Session state. 
+     * The Client and Server can store Session state to enable reliable messaging to continue across a sequence 
+     * of Network Connections. This bit is used to control the lifetime of the Session state. 
+     * 
+     * If CleanSession is set to 0, the Server MUST resume communications with the Client based on state from 
+     * the current Session (as identified by the Client identifier). 
+     * If there is no Session associated with the Client identifier the Server MUST create a new Session. 
+     * The Client and Server MUST store the Session after the Client and Server are disconnected.
+     * After the disconnection of a Session that had CleanSession set to 0, the Server MUST store 
+     * further QoS 1 and QoS 2 messages that match any subscriptions that the client had at the time of disconnection 
+     * as part of the Session state.
+     * It MAY also store QoS 0 messages that meet the same criteria.
+     * 
+     * If CleanSession is set to 1, the Client and Server MUST discard any previous Session and start a new one.
+     * This Session lasts as long as the Network Connection. State data associated with this Session MUST NOT be reused
+     * in any subsequent Session.
+     * 
+     * The Session state in the Client consists of:
+     *      QoS 1 and QoS 2 messages which have been sent to the Server, but have not been completely acknowledged.
+     *      QoS 2 messages which have been received from the Server, but have not been completely acknowledged. 
+     * 
+     * To ensure consistent state in the event of a failure, the Client should repeat its attempts to connect with 
+     * CleanSession set to 1, until it connects successfully.
+     * 
+     * Typically, a Client will always connect using CleanSession set to 0 or CleanSession set to 1 and not swap 
+     * between the two values. The choice will depend on the application. A Client using CleanSession set to 1 will 
+     * not receive old Application Messages and has to subscribe afresh to any topics that it is interested in each 
+     * time it connects. A Client using CleanSession set to 0 will receive all QoS 1 or QoS 2 messages that were 
+     * published while it was disconnected. Hence, to ensure that you do not lose messages while disconnected, 
+     * use QoS 1 or QoS 2 with CleanSession set to 0.
+     * 
+     * When a Client connects with CleanSession set to 0, it is requesting that the Server maintain its MQTT session 
+     * state after it disconnects. Clients should only connect with CleanSession set to 0, if they intend to reconnect 
+     * to the Server at some later point in time. When a Client has determined that it has no further use for 
+     * the session it should do a final connect with CleanSession set to 1 and then disconnect.
+     */
+    bool cleanSession;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (!will && (willQoS != QoSLevel.AtMostOnce || willRetain)) return false;
+        if (!userName && password) return false;
+
+        return true;
+    }
+
+    @safe @nogc
+    @property ubyte flags() const pure nothrow
+    {
+        return cast(ubyte)(
+            (userName ? 0x80 : 0x00) | 
+            (password ? 0x40 : 0x00) | 
+            (willRetain ? 0x20 : 0x00) |
+            (willQoS << 3) |
+            (will ? 0x04 : 0x00) |
+            (cleanSession ? 0x02 : 0x00)
+            );
+    }
+
+    @safe @nogc
+    @property void flags(ubyte value) pure nothrow
+    {
+        userName = (value & 0x80) == 0x80;
+        password = (value & 0x40) == 0x40;
+        willRetain = (value & 0x20) == 0x20;
+        willQoS = cast(QoSLevel)((value >> 3) & 0x03);
+        will = (value & 0x04) == 0x04;
+        cleanSession = (value & 0x02) == 0x02;
+    }
+    
+    this(bool userName, bool password, bool willRetain, QoSLevel willQoS, bool will, bool cleanSession)
+    {
+        this.userName = userName;
+        this.password = password;
+        this.willRetain = willRetain;
+        this.willQoS = willQoS;
+        this.will = will;
+        this.cleanSession = cleanSession;
+    }
+    
+    this(T)(T value) if(isIntegral!T)
+    {
+        this.flags = cast(ubyte)value;
+    }
+    
+    void toBytes(scope void delegate(ubyte) sink) const
+    {
+        sink(flags);
+    }
+    
+    static ConnectFlags fromBytes(R)(R range) 
+        if (isInputRange!R && isIntegral!(ElementType!R))
+    {
+        ConnectFlags res;
+        res.flags = cast(ubyte)range.front;
+        range.popFront();
+        
+        return res;
+    }
+    
+    alias flags this;
+    
+    unittest
+    {
+        import std.array;
+
+        ConnectFlags flags;
+
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == 0);
+
+        flags = 1; //reserved - no change
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == 0);
+
+        flags = 2;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
+
+        flags = 4;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
+
+        flags = 24;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
+
+        flags = 32;
+        assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
+
+        flags = 64;
+        assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
+
+        flags = 128;
+        assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
+        
+        auto bytes = appender!(ubyte[]);
+        flags.toBytes(a => bytes.put(a));
+        
+        assert(bytes.data.length == 1);
+        assert(bytes.data[0] == 128);
+
+        flags = ConnectFlags.fromBytes([2]);
+        assert(flags.cleanSession);
+    }
+}
+
+/**
  * After a Network Connection is established by a Client to a Server, 
  * the first Packet sent from the Client to the Server MUST be a CONNECT Packet.
  * 
@@ -391,7 +663,47 @@ struct Connect
 
     FixedHeader header;
 
+    /// The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”
+    MqttString protocolName;
 
+    /**
+     * The 8 bit unsigned value that represents the revision level of the protocol used by the Client.
+     * The value of the Protocol Level field for the version 3.1.1 of the protocol is 4 (0x04).
+     */
+    MqttByte protocolLevel = MqttByte(4); //http://forum.dlang.org/post/bbihuuopxkcgembnbzrr@forum.dlang.org
+
+    /**
+     * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
+     * It also indicates the presence or absence of fields in the payload.
+     */
+    ConnectFlags connectFlags;
+
+    /**
+     * The Keep Alive is a time interval measured in seconds. Expressed as a 16-bit word, it is the maximum time 
+     * interval that is permitted to elapse between the point at which the Client finishes transmitting one Control 
+     * Packet and the point it starts sending the next. It is the responsibility of the Client to ensure that the 
+     * interval between Control Packets being sent does not exceed the Keep Alive value. 
+     * In the absence of sending any other Control Packets, the Client MUST send a PINGREQ Packet.
+     * 
+     * The Client can send PINGREQ at any time, irrespective of the Keep Alive value, and use the PINGRESP to determine 
+     * that the network and the Server are working.
+     * 
+     * If the Keep Alive value is non-zero and the Server does not receive a Control Packet from the Client within 
+     * one and a half times the Keep Alive time period, it MUST disconnect the Network Connection to the Client as if 
+     * the network had failed.
+     * 
+     * If a Client does not receive a PINGRESP Packet within a reasonable amount of time after it has sent a PINGREQ, 
+     * it SHOULD close the Network Connection to the Server.
+     * 
+     * A Keep Alive value of zero (0) has the effect of turning off the keep alive mechanism. 
+     * This means that, in this case, the Server is not required to disconnect the Client on the grounds of inactivity.
+     * Note that a Server is permitted to disconnect a Client that it determines to be inactive or non-responsive 
+     * at any time, regardless of the Keep Alive value provided by that Client.
+     * 
+     * The actual value of the Keep Alive is application specific; typically this is a few minutes. 
+     * The maximum value is 18 hours 12 minutes and 15 seconds. 
+     */
+    MqttShort keepAlive;
 }
 
 struct ConnAck
