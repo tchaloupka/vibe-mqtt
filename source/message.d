@@ -169,26 +169,6 @@ struct FixedHeader
     }
 }
 
-struct MqttByte
-{
-    ubyte num;
-    alias num this;
-
-    //TODO: Does not work as expected: http://forum.dlang.org/post/bbihuuopxkcgembnbzrr@forum.dlang.org
-//    static MqttByte opCall(T)(T value) if (isIntegral!T)
-//    {
-//        MqttByte res;
-//        res.num = cast(ubyte)value;
-//        return res;
-//    }
-}
-
-struct MqttShort
-{
-    ushort num;
-    alias num this;
-}
-
 /**
  * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
  * It also indicates the presence or absence of fields in the payload.
@@ -355,8 +335,8 @@ void setRemainingLength(T)(auto ref T msg) pure nothrow
 @safe @nogc
 uint itemLength(T)(auto ref in T item) pure nothrow
 {
-    static if (is(T == MqttByte)) return 1;
-    else static if (is(T == MqttShort)) return 2;
+    static if (is(T == ubyte)) return 1;
+    else static if (is(T == ushort)) return 2;
     else static if (is(T == string)) return cast(uint)(2 + item.length);
     else static if (is(T == ConnectFlags)) return 1;
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
@@ -395,14 +375,14 @@ void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
 {
     //write header
     static if (__traits(hasMember, T, "header")) item.header.toBytes(sink);
-    static if (is(T == MqttByte))
+    static if (is(T == ubyte))
     {
-        sink(item.num);
+        sink(item);
     }
-    else static if (is(T == MqttShort))
+    else static if (is(T == ushort))
     {
-        sink(cast(ubyte) (item.num >> 8));
-        sink(cast(ubyte) item.num);
+        sink(cast(ubyte) (item >> 8));
+        sink(cast(ubyte) item);
     }
     else static if (is(T == string))
     {
@@ -410,7 +390,7 @@ void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
         
         enforce(item.length <= 0xFF, "String too long: ", item);
         
-        MqttShort(cast(ushort)item.length).toBytes(sink);
+        (cast(ushort)item.length).toBytes(sink);
         foreach(b; item.representation)
         {
             sink(b);
@@ -477,7 +457,7 @@ struct Connect
      * The 8 bit unsigned value that represents the revision level of the protocol used by the Client.
      * The value of the Protocol Level field for the version 3.1.1 of the protocol is 4 (0x04).
      */
-    MqttByte protocolLevel = MqttByte(4); //http://forum.dlang.org/post/bbihuuopxkcgembnbzrr@forum.dlang.org
+    ubyte protocolLevel = 4;
 
     /**
      * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
@@ -510,7 +490,7 @@ struct Connect
      * The actual value of the Keep Alive is application specific; typically this is a few minutes. 
      * The maximum value is 18 hours 12 minutes and 15 seconds. 
      */
-    MqttShort keepAlive;
+    ushort keepAlive;
 
     /// Client Identifier
     string clientIdentifier;
@@ -546,55 +526,55 @@ struct ConnAck
 struct Publish
 {
     FixedHeader header;
-    MqttShort packetId; // if QoS > 0
+    ushort packetId; // if QoS > 0
 }
 
 struct PubAck
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct PubRec
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct PubRel
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct PubComp
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct Subscribe
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct SubAck
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct Unsubscribe
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct UnsubAck
 {
     FixedHeader header;
-    MqttShort packetId;
+    ushort packetId;
 }
 
 struct PingReq

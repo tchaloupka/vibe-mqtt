@@ -50,18 +50,14 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
     }
 
     T res;
-    static if (is(T == MqttByte))
+    static if (is(T == ubyte))
     {
-        res.num = nextByte();
+        res = nextByte();
     }
-    else static if (is(T == ConnectFlags))
+    else static if (is(T == ushort))
     {
-        res.flags = nextByte();
-    }
-    else static if (is(T == MqttShort))
-    {
-        res.num |= cast(ushort) (nextByte() << 8);
-        res.num |= cast(ushort) nextByte();
+        res |= cast(ushort) (nextByte() << 8);
+        res |= cast(ushort) nextByte();
     }
     else static if (is(T == string))
     {
@@ -69,8 +65,12 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
         import std.array;
         import std.algorithm : map;
 
-        auto length = deserialize!MqttShort(wrapped);
+        auto length = deserialize!ushort(wrapped);
         res = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
+    }
+    else static if (is(T == ConnectFlags))
+    {
+        res.flags = nextByte();
     }
     else static if (is(T == FixedHeader))
     {
@@ -144,14 +144,12 @@ unittest
     assert(header.length == 256);
 }
 
-/// MqttByte tests
+/// ubyte tests
 unittest
 {
     import std.array;
     
-    auto id = MqttByte(10);
-    assert(id == 10);
-    
+    ubyte id = 10;
     auto bytes = appender!(ubyte[]);
     id.toBytes(a => bytes.put(a));
     
@@ -166,18 +164,16 @@ unittest
     assert(bytes.data.length == 1);
     assert(bytes.data[0] == 0x2B);
     
-    id = deserialize!MqttByte([0x11]);
+    id = deserialize!ubyte([0x11]);
     assert(id == 0x11);
 }
 
-/// MqttShort tests
+/// ushort tests
 unittest
 {
     import std.array;
     
-    auto id = MqttShort(1);
-    assert(id == 1);
-    
+    ushort id = 1;
     auto bytes = appender!(ubyte[]);
     id.toBytes(a => bytes.put(a));
     
@@ -194,7 +190,7 @@ unittest
     assert(bytes.data[0] == 0x1A);
     assert(bytes.data[1] == 0x2B);
     
-    id = deserialize!MqttShort([0x11, 0x22]);
+    id = deserialize!ushort([0x11, 0x22]);
     assert(id == 0x1122);
 }
 

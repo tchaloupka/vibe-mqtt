@@ -1,9 +1,9 @@
 {
-	"name": "mqtt-d",
-	"description": "A MQTT client for D",
-	"copyright": "Copyright © 2015, Tomáš Chaloupka",
-	"authors": ["Tomáš Chaloupka"],
+    "name": "mqtt-d",
+    "description": "A MQTT client for D",
+    "copyright": "Copyright © 2015, Tomáš Chaloupka",
+    "authors": ["Tomáš Chaloupka"],
     "targetType": "library",
-	"dependencies": {
-	}
+    "dependencies": {
+    }
 }
