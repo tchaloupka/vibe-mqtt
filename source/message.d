@@ -104,8 +104,6 @@ class PacketFormatException : Exception
     }
 }
 
-enum bool canDecode(R) = isInputRange!R && isIntegral!(ElementType!R);
-
 /**
  * Each MQTT Control Packet contains a fixed header.
  * 
@@ -169,84 +167,12 @@ struct FixedHeader
     {
         this.flags = cast(ubyte)value;
     }
-
-    static FixedHeader fromBytes(R)(R range) if (canDecode!R)
-    {
-        FixedHeader header;
-
-        header.flags = range.front;
-        range.popFront();
-
-        int multiplier = 1;
-        ubyte digit;
-        do
-        {
-            digit = range.front;
-            range.popFront();
-            header.length += ((digit & 127) * multiplier);
-            multiplier *= 128;
-            if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
-        } while ((digit & 128) != 0);
-
-        return header;
-    }
-    
-    unittest
-    {
-        import std.array;
-
-        assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
-
-        FixedHeader header = 0x0F;
-        assert(header.type == PacketType.RESERVED1);
-        assert(header.dup);
-        assert(header.retain);
-        assert(header.qos == QoSLevel.Reserved);
-
-        header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
-
-        auto bytes = appender!(ubyte[]);
-        header.toBytes(a => bytes.put(a));
-
-        assert(bytes.data.length == 3);
-        assert(bytes.data[0] == 0x1F);
-        assert(bytes.data[1] == 0xFF);
-        assert(bytes.data[2] == 0x01);
-
-        header.length = 10;
-        bytes.clear();
-        header.toBytes(a => bytes.put(a));
-        assert(bytes.data.length == 2);
-        assert(bytes.data[0] == 0x1F);
-        assert(bytes.data[1] == 0x0A);
-
-        header = FixedHeader.fromBytes(cast(ubyte[])[0x1F, 0x0A]);
-        assert(header.type == PacketType.CONNECT);
-        assert(header.flags == 0x1F);
-        assert(header.length == 10);
-
-        header = FixedHeader.fromBytes(cast(ubyte[])[0x20, 0x80, 0x02]);
-        assert(header.type == PacketType.CONNACK);
-        assert(header.flags == 0x20);
-        assert(header.length == 256);
-    }
 }
 
 struct MqttByte
 {
     ubyte num;
-    
     alias num this;
-
-    @safe @nogc
-    static MqttByte fromBytes(R)(R range) if (canDecode!R)
-    {
-        MqttByte res;
-        res.num = cast(ubyte)range.front;
-        range.popFront();
-        
-        return res;
-    }
 
     //TODO: Does not work as expected: http://forum.dlang.org/post/bbihuuopxkcgembnbzrr@forum.dlang.org
 //    static MqttByte opCall(T)(T value) if (isIntegral!T)
@@ -255,124 +181,18 @@ struct MqttByte
 //        res.num = cast(ubyte)value;
 //        return res;
 //    }
-    
-    unittest
-    {
-        import std.array;
-        
-        auto id = MqttByte(10);
-        assert(id == 10);
-        
-        auto bytes = appender!(ubyte[]);
-        id.toBytes(a => bytes.put(a));
-        
-        assert(bytes.data.length == 1);
-        assert(bytes.data[0] == 0x0A);
-        
-        id = 0x2B;
-        bytes.clear();
-        
-        id.toBytes(a => bytes.put(a));
-        
-        assert(bytes.data.length == 1);
-        assert(bytes.data[0] == 0x2B);
-        
-        id = MqttByte.fromBytes([0x11]);
-        assert(id == 0x11);
-    }
 }
 
 struct MqttShort
 {
     ushort num;
-
     alias num this;
-
-    static MqttShort fromBytes(R)(R range) if (canDecode!R)
-    {
-        MqttShort res;
-        res.num |= cast(ushort)(range.front << 8);
-        range.popFront();
-        res.num |= cast(ushort)(range.front);
-        range.popFront();
-
-        return res;
-    }
-
-    unittest
-    {
-        import std.array;
-
-        auto id = MqttShort(1);
-        assert(id == 1);
-
-        auto bytes = appender!(ubyte[]);
-        id.toBytes(a => bytes.put(a));
-
-        assert(bytes.data.length == 2);
-        assert(bytes.data[0] == 0);
-        assert(bytes.data[1] == 1);
-
-        id = 0x1A2B;
-        bytes.clear();
-
-        id.toBytes(a => bytes.put(a));
-
-        assert(bytes.data.length == 2);
-        assert(bytes.data[0] == 0x1A);
-        assert(bytes.data[1] == 0x2B);
-
-        id = MqttShort.fromBytes([0x11, 0x22]);
-        assert(id == 0x1122);
-    }
 }
 
 struct MqttString
 {
     string name;
-
     alias name this;
-
-    static MqttString fromBytes(R)(R range) if (canDecode!R)
-    {
-        import std.range : takeExactly, drop, refRange;
-        import std.array;
-        import std.algorithm : map;
-        import std.traits : isArray;
-
-        MqttString res;
-
-        auto wrapped = refRange(&range); // to avoid problems with consuming different types of range
-        auto length = MqttShort.fromBytes(wrapped);
-        res.name = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
-
-        return res;
-    }
-    
-    unittest
-    {
-        import std.array;
-        import std.string : representation;
-        import std.range;
-        
-        auto name = MqttString("test");
-        assert(name == "test");
-        
-        auto bytes = appender!(ubyte[]);
-        name.toBytes(a => bytes.put(a));
-        
-        assert(bytes.data.length == 6);
-        assert(bytes.data[0] == 0);
-        assert(bytes.data[1] == 4);
-        assert(bytes.data[2..$] == "test".representation);
-        
-        name = MqttString.fromBytes(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
-        assert(name == "randomname");
-
-        auto range = inputRangeObject(cast(ubyte[])[0x00, 0x04] ~ "MQTT".representation);
-        name = MqttString.fromBytes(range);
-        assert(name == "MQTT");
-    }
 }
 
 /**
@@ -478,15 +298,6 @@ struct ConnectFlags
     bool cleanSession;
 
     @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (!will && (willQoS != QoSLevel.AtMostOnce || willRetain)) return false;
-        if (!userName && password) return false;
-
-        return true;
-    }
-
-    @safe @nogc
     @property ubyte flags() const pure nothrow
     {
         return cast(ubyte)(
@@ -525,57 +336,7 @@ struct ConnectFlags
         this.flags = cast(ubyte)value;
     }
     
-    static ConnectFlags fromBytes(R)(R range) if (canDecode!R)
-    {
-        ConnectFlags res;
-        res.flags = cast(ubyte)range.front;
-        range.popFront();
-        
-        return res;
-    }
-    
     alias flags this;
-    
-    unittest
-    {
-        import std.array;
-
-        ConnectFlags flags;
-
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-        assert(flags == 0);
-
-        flags = 1; //reserved - no change
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-        assert(flags == 0);
-
-        flags = 2;
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
-
-        flags = 4;
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
-
-        flags = 24;
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
-
-        flags = 32;
-        assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
-
-        flags = 64;
-        assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
-
-        flags = 128;
-        assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
-        
-        auto bytes = appender!(ubyte[]);
-        flags.toBytes(a => bytes.put(a));
-        
-        assert(bytes.data.length == 1);
-        assert(bytes.data[0] == 128);
-
-        flags = ConnectFlags.fromBytes([2]);
-        assert(flags.cleanSession);
-    }
 }
 
 /// Computes and sets remaining length to the package header field
@@ -617,7 +378,13 @@ void checkPacket(T)(auto ref in T packet) pure
         enforce(packet.header == (value & mask), "Wrong header");
     }
 
-    static if (is(T == Connect))
+    static if (is(T == ConnectFlags))
+    {
+        enforce(will || (willQoS == QoSLevel.AtMostOnce && !willRetain), 
+            "WillQoS and Will Retain MUST be 0 if Will flag is not set");
+        enforce(userName || !password, "Password MUST be set to 0 if User flag is 0");
+    }
+    else static if (is(T == Connect))
     {
         checkHeader(0x10);
         enforce(packet.header.length != 0, "Length must be set!");
@@ -625,6 +392,7 @@ void checkPacket(T)(auto ref in T packet) pure
             format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
         enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
+
     }
 }
 
