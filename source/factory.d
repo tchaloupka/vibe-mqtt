@@ -34,22 +34,33 @@ import std.range;
 
 import mqttd.message;
 
+version (unittest)
+{
+    import std.stdio;
+}
+
 enum bool canDecode(R) = isInputRange!R && isIntegral!(ElementType!R);
 
 T deserialize(T, R)(auto ref R range) if (canDecode!R)
 {
-    import std.range : refRange;
+    import std.exception : enforce;
 
-    auto wrapped = refRange(&range); // to avoid problems with consuming different types of range
+    static if (is(R == RefRange!TL, TL)) alias wrapped = range;
+    else auto wrapped = refRange(&range); // to avoid problems with consuming different types of range
 
     ubyte nextByte()
     {
-        ubyte b = cast(ubyte)wrapped.front;
+        auto b = cast(ubyte)wrapped.front;
         range.popFront();
         return b;
     }
 
     T res;
+    bool implemented = true;
+
+    // read header if presented
+    static if (__traits(hasMember, T, "header")) res.header = deserialize!FixedHeader(wrapped);
+
     static if (is(T == ubyte))
     {
         res = nextByte();
@@ -61,12 +72,14 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
     }
     else static if (is(T == string))
     {
-        import std.range : takeExactly;
         import std.array;
         import std.algorithm : map;
 
         auto length = deserialize!ushort(wrapped);
         res = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
+        
+        //TODO: Solve why this is needed
+        wrapped.popFrontN(length);
     }
     else static if (is(T == ConnectFlags))
     {
@@ -86,9 +99,39 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
             if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
         } while ((digit & 128) != 0);
     }
-    else assert(0, "Not implemented deserialize for " ~ T.stringof);
-    
-    return res;
+    else static if (is(T == Connect))
+    {
+        res.protocolName = deserialize!string(wrapped);
+        res.protocolLevel = deserialize!ubyte(wrapped);
+        res.connectFlags = deserialize!ConnectFlags(wrapped);
+        res.keepAlive = deserialize!ushort(wrapped);
+        res.clientIdentifier = deserialize!string(wrapped);
+
+        if (res.connectFlags.will)
+        {
+            res.willTopic = deserialize!string(wrapped);
+            res.willMessage = deserialize!string(wrapped);
+
+            writeln(res);
+        }
+        if (res.connectFlags.userName)
+        {
+            res.userName = deserialize!string(wrapped);
+            writeln(res);
+            if (res.connectFlags.password) res.password = deserialize!string(wrapped);
+        }
+
+        enforce(wrapped.empty, new PacketFormatException("There is more data available than specified in header"));
+    }
+    else implemented = false;
+
+    if(implemented) 
+    {
+        // validate packet if header presented
+        static if (__traits(hasMember, T, "header")) res.checkPacket();
+        return res;
+    }
+    assert(0, "Not implemented deserialize for " ~ T.stringof);
 }
 
 void serialize(T)(T msg, scope void delegate(ubyte) sink)
@@ -260,14 +303,36 @@ unittest
     assert(flags.cleanSession);
 }
 
+/// Connect message tests
 unittest
 {
     import std.array;
 
     auto con = Connect();
     con.clientIdentifier = "testclient";
+    con.connectFlags.userName = true;
+    con.userName = "user";
 
-    auto buffer = appender!(byte[]);
+    auto buffer = appender!(ubyte[]);
 
-    serialize(con, a => buffer.put(a));
+    serialize(con, (ubyte a) { /*writef("%.2x ", a);*/ buffer.put(a); });
+
+    assert(buffer.data.length == 30);
+
+    assert(buffer.data == cast(ubyte[])[
+            0x10, //fixed header
+            0x1c, // rest is 30
+            0x00, 0x04, //length of MQTT text
+            0x4d, 0x51, 0x54, 0x54, // MQTT
+            0x04, //protocol level
+            0x80, //just user name flag
+            0x00, 0x00, //zero keepalive
+            0x00, 0x0a, //length of client identifier
+            0x74, 0x65, 0x73, 0x74, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, //testclient text
+            0x00, 0x04, //username length
+            0x75, 0x73, 0x65, 0x72 //user text
+        ]);
+
+    auto con2 = deserialize!Connect(buffer.data);
+    assert(con == con2);
 }

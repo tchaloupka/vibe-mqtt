@@ -324,7 +324,11 @@ void setRemainingLength(T)(auto ref T msg) pure nothrow
             msg.keepAlive.itemLength + msg.clientIdentifier.itemLength;
     
         if (msg.connectFlags.will) len += msg.willTopic.itemLength + msg.willMessage.itemLength;
-        if (msg.connectFlags.userName) len += msg.userName.itemLength + msg.password.itemLength;
+        if (msg.connectFlags.userName)
+        {
+            len += msg.userName.itemLength;
+            if (msg.connectFlags.password) len += msg.password.itemLength;
+        }
     }
     else assert(0, "Not implemented setRemainingLength for " ~ T.stringof);
     
@@ -347,9 +351,12 @@ void checkPacket(T)(auto ref in T packet) pure
 {
     import std.string : format;
 
-    void checkHeader(ubyte value, ubyte mask = 0xFF)
+    static if (__traits(hasMember, T, "header"))
     {
-        enforce(packet.header == (value & mask), "Wrong header");
+        void checkHeader(ubyte value, ubyte mask = 0xFF)
+        {
+            enforce(packet.header == (value & mask), "Wrong header");
+        }
     }
 
     static if (__traits(hasMember, T, "clientIdentifier"))
@@ -360,9 +367,9 @@ void checkPacket(T)(auto ref in T packet) pure
 
     static if (is(T == ConnectFlags))
     {
-        enforce(will || (willQoS == QoSLevel.AtMostOnce && !willRetain), 
+        enforce(packet.will || (packet.willQoS == QoSLevel.AtMostOnce && !packet.willRetain), 
             "WillQoS and Will Retain MUST be 0 if Will flag is not set");
-        enforce(userName || !password, "Password MUST be set to 0 if User flag is 0");
+        enforce(packet.userName || !packet.password, "Password MUST be set to 0 if User flag is 0");
     }
     else static if (is(T == Connect))
     {
@@ -372,6 +379,7 @@ void checkPacket(T)(auto ref in T packet) pure
             format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
         enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
+        packet.connectFlags.checkPacket();
         enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
     }
 }
@@ -435,7 +443,7 @@ void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
         if (item.connectFlags.userName)
         {
             item.userName.toBytes(sink);
-            item.password.toBytes(sink);
+            if (item.connectFlags.password) item.password.toBytes(sink);
         }
     }
     else assert(0, "Not implemented toBytes for " ~ T.stringof);
