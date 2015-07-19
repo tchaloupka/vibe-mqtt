@@ -29,9 +29,28 @@
  */
 module mqttd.factory;
 
+import std.string : format;
 import mqttd.message;
 
 void serialize(T)(T msg, scope void delegate(ubyte) sink)
 {
+    //set remaining packet length
+    msg.setRemainingLength;
 
+    //check if is valid
+    try msg.checkPacket();
+    catch (Exception ex) throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg));
+
+    msg.toBytes(sink);
+}
+
+unittest
+{
+    import std.array;
+
+    auto con = Connect();
+
+    auto buffer = appender!(byte[]);
+
+    serialize(con, a => buffer.put(a));
 }

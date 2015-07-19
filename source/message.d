@@ -30,14 +30,11 @@
 module mqttd.message;
 
 import std.range;
+import std.exception : enforce;
 import std.traits : isIntegral;
 
-version (unittest)
-{
-    import std.stdio;
-}
-
 enum ubyte MQTT_PROTOCOL_LEVEL_3_1_1 = 0x04;
+enum string MQTT_PROTOCOL_NAME = "MQTT";
 
 /**
  * MQTT Control Packet type
@@ -133,7 +130,7 @@ struct FixedHeader
      * including data in the variable header and the payload. 
      * The Remaining Length does not include the bytes used to encode the Remaining Length.
      */
-    int length;
+    uint length;
 
     @safe @nogc
     @property ubyte flags() const pure nothrow
@@ -171,20 +168,6 @@ struct FixedHeader
     this(T)(T value) if(isIntegral!T)
     {
         this.flags = cast(ubyte)value;
-    }
-
-    void toBytes(scope void delegate(ubyte) sink) const
-    {
-        sink(flags);
-
-        int tmp = length;
-        do
-        {
-            byte digit = tmp % 128;
-            tmp /= 128;
-            if (tmp > 0) digit |= 0x80;
-            sink(digit);
-        } while (tmp > 0);
     }
 
     static FixedHeader fromBytes(R)(R range) if (canDecode!R)
@@ -254,11 +237,6 @@ struct MqttByte
     ubyte num;
     
     alias num this;
-    
-    void toBytes(scope void delegate(ubyte) sink) const
-    {
-        sink(num);
-    }
 
     @safe @nogc
     static MqttByte fromBytes(R)(R range) if (canDecode!R)
@@ -310,12 +288,6 @@ struct MqttShort
 
     alias num this;
 
-    void toBytes(scope void delegate(ubyte) sink) const
-    {
-        sink(cast(ubyte) (num >> 8));
-        sink(cast(ubyte) num);
-    }
-
     static MqttShort fromBytes(R)(R range) if (canDecode!R)
     {
         MqttShort res;
@@ -361,20 +333,6 @@ struct MqttString
 
     alias name this;
 
-    void toBytes(scope void delegate(ubyte) sink) const
-    {
-        import std.exception : enforce;
-        import std.string : representation;
-
-        enforce(name.length <= 0xFF, "String too long");
-
-        MqttShort(cast(ushort)name.length).toBytes(sink);
-        foreach(b; name.representation)
-        {
-            sink(b);
-        }
-    }
-    
     static MqttString fromBytes(R)(R range) if (canDecode!R)
     {
         import std.range : takeExactly, drop, refRange;
@@ -567,11 +525,6 @@ struct ConnectFlags
         this.flags = cast(ubyte)value;
     }
     
-    void toBytes(scope void delegate(ubyte) sink) const
-    {
-        sink(flags);
-    }
-    
     static ConnectFlags fromBytes(R)(R range) if (canDecode!R)
     {
         ConnectFlags res;
@@ -623,6 +576,121 @@ struct ConnectFlags
         flags = ConnectFlags.fromBytes([2]);
         assert(flags.cleanSession);
     }
+}
+
+/// Computes and sets remaining length to the package header field
+@safe @nogc
+void setRemainingLength(T)(auto ref T msg) pure nothrow
+{
+    uint len;
+    static if (is(T == Connect))
+    {
+        len = msg.protocolName.itemLength + msg.protocolLevel.itemLength + msg.connectFlags.itemLength + 
+            msg.keepAlive.itemLength + msg.clientIdentifier.itemLength;
+    
+        if (msg.connectFlags.will) len += msg.willTopic.itemLength + msg.willMessage.itemLength;
+        if (msg.connectFlags.userName) len += msg.userName.itemLength + msg.password.itemLength;
+    }
+    else assert(0, "Not implemented setRemainingLength for " ~ T.stringof);
+    
+    msg.header.length = len;
+}
+
+/// Gets required buffer size to encode into
+@safe @nogc
+uint itemLength(T)(auto ref in T item) pure nothrow
+{
+    static if (is(T == MqttByte)) return 1;
+    else static if (is(T == MqttShort)) return 2;
+    else static if (is(T == MqttString)) return cast(uint)(2 + item.length);
+    else static if (is(T == ConnectFlags)) return 1;
+    else assert(0, "Not implemented itemLength for " ~ T.stringof);
+}
+
+@safe
+void checkPacket(T)(auto ref in T packet) pure
+{
+    import std.string : format;
+
+    void checkHeader(ubyte value, ubyte mask = 0xFF)
+    {
+        enforce(packet.header == (value & mask), "Wrong header");
+    }
+
+    static if (is(T == Connect))
+    {
+        checkHeader(0x10);
+        enforce(packet.header.length != 0, "Length must be set!");
+        enforce(packet.protocolName == MQTT_PROTOCOL_NAME, 
+            format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
+        enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
+            format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
+    }
+}
+
+/// Write item bytes to delegate sink
+void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
+{
+    //write header
+    static if (__traits(hasMember, T, "header")) item.header.toBytes(sink);
+    static if (is(T == MqttByte))
+    {
+        sink(item.num);
+    }
+    else static if (is(T == MqttShort))
+    {
+        sink(cast(ubyte) (item.num >> 8));
+        sink(cast(ubyte) item.num);
+    }
+    else static if (is(T == MqttString))
+    {
+        import std.string : representation;
+        
+        enforce(item.name.length <= 0xFF, "String too long: ", item.name);
+        
+        MqttShort(cast(ushort)item.name.length).toBytes(sink);
+        foreach(b; item.name.representation)
+        {
+            sink(b);
+        }
+    }
+    else static if (is(T == FixedHeader))
+    {
+        sink(item.flags);
+        
+        int tmp = item.length;
+        do
+        {
+            byte digit = tmp % 128;
+            tmp /= 128;
+            if (tmp > 0) digit |= 0x80;
+            sink(digit);
+        } while (tmp > 0);
+    }
+    else static if (is(T == ConnectFlags))
+    {
+        sink(item.flags);
+    }
+    else static if (is(T == Connect))
+    {
+        item.protocolName.toBytes(sink);
+        item.protocolLevel.toBytes(sink);
+        item.connectFlags.toBytes(sink);
+        item.keepAlive.toBytes(sink);
+        item.clientIdentifier.toBytes(sink);
+
+        if (item.connectFlags.will)
+        {
+            item.willTopic.toBytes(sink);
+            item.willMessage.toBytes(sink);
+        }
+        if (item.connectFlags.userName)
+        {
+            item.userName.toBytes(sink);
+            item.password.toBytes(sink);
+        }
+    }
+    else assert(0, "Not implemented toBytes for " ~ T.stringof);
 }
 
 /**
@@ -697,192 +765,88 @@ struct Connect
     /// Password
     MqttString password;
 
-    @safe @nogc
-    @property bool isValid() const pure nothrow
+    static Connect opCall()
     {
-        if (header != 0x10) return false;
+        Connect res;
+        res.header = 0x10;
+        res.protocolName = MQTT_PROTOCOL_NAME;
+        res.protocolLevel = MQTT_PROTOCOL_LEVEL_3_1_1;
 
-        return true;
+        return res;
     }
 }
 
 struct ConnAck
 {
     FixedHeader header;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.CONNACK || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct Publish
 {
     FixedHeader header;
     MqttShort packetId; // if QoS > 0
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PUBLISH) return false;
-        
-        return true;
-    }
 }
 
 struct PubAck
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PUBACK || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct PubRec
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PUBREC || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct PubRel
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PUBREL || header.flags != 0x02) return false;
-        
-        return true;
-    }
 }
 
 struct PubComp
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PUBCOMP || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct Subscribe
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.SUBSCRIBE || header.flags != 0x02) return false;
-        
-        return true;
-    }
 }
 
 struct SubAck
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.SUBACK || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct Unsubscribe
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.UNSUBSCRIBE || header.flags != 0x02) return false;
-        
-        return true;
-    }
 }
 
 struct UnsubAck
 {
     FixedHeader header;
     MqttShort packetId;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.UNSUBACK || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct PingReq
 {
     FixedHeader header;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PINGREQ || header.flags != 0x00) return false;
-        
-        return true;
-    }
-
 }
 
 struct PingResp
 {
     FixedHeader header;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.PINGRESP || header.flags != 0x00) return false;
-        
-        return true;
-    }
 }
 
 struct Disconnect
 {
     FixedHeader header;
-
-    @safe @nogc
-    @property bool isValid() const pure nothrow
-    {
-        if (header.type != PacketType.DISCONNECT || header.flags != 0x00) return false;
-        
-        return true;
-    }
-
 }
 
