@@ -164,6 +164,7 @@ struct Flags
 struct FixedHeader
 {
     import std.range;
+    import std.traits : isIntegral, isUnsigned;
 
     /// Represented as a 4-bit unsigned value
     PacketType type;
@@ -192,13 +193,11 @@ struct FixedHeader
         } while (tmp > 0);
     }
 
-    static FixedHeader fromBytes(R)(R range) if (isInputRange!R && is(ElementType!R == ubyte))
+    static FixedHeader fromBytes(R)(R range)
+        if (isInputRange!R && isIntegral!(ElementType!R) && isUnsigned!(ElementType!R))
     {
-        import std.exception;
-
         FixedHeader header;
 
-        enforce(!range.empty);
         ubyte first = range.front;
         range.popFront();
 
@@ -209,7 +208,6 @@ struct FixedHeader
         ubyte digit;
         do
         {
-            enforce(!range.empty);
             digit = range.front;
             range.popFront();
             header.length += ((digit & 127) * multiplier);
@@ -253,6 +251,140 @@ struct FixedHeader
     }
 }
 
+struct MqttShort
+{
+    import std.range;
+    import std.traits : isIntegral;
+
+    ushort num;
+
+    alias num this;
+
+    void toBytes(scope void delegate(ubyte) sink) const
+    {
+        sink(cast(ubyte) (num >> 8));
+        sink(cast(ubyte) num);
+    }
+    
+    static MqttShort fromBytes(R)(R range) 
+        if (isInputRange!R && isIntegral!(ElementType!R))
+    {
+        MqttShort res;
+        res.num |= cast(ushort)(range.front << 8);
+        range.popFront();
+        res.num |= cast(ushort)(range.front);
+        range.popFront();
+
+        return res;
+    }
+
+    unittest
+    {
+        import std.array;
+
+        auto id = MqttShort(1);
+        assert(id == 1);
+
+        auto bytes = appender!(ubyte[]);
+        id.toBytes(a => bytes.put(a));
+
+        assert(bytes.data.length == 2);
+        assert(bytes.data[0] == 0);
+        assert(bytes.data[1] == 1);
+
+        id = 0x1A2B;
+        bytes.clear();
+
+        id.toBytes(a => bytes.put(a));
+
+        assert(bytes.data.length == 2);
+        assert(bytes.data[0] == 0x1A);
+        assert(bytes.data[1] == 0x2B);
+
+        id = MqttShort.fromBytes([0x11, 0x22]);
+        assert(id == 0x1122);
+    }
+}
+
+struct MqttString
+{
+    import std.range;
+    import std.traits : isIntegral;
+
+    string name;
+
+    alias name this;
+
+    void toBytes(scope void delegate(ubyte) sink) const
+    {
+        import std.exception : enforce;
+        import std.string : representation;
+
+        enforce(name.length <= 0xFF, "String too long");
+
+        MqttShort(cast(ushort)name.length).toBytes(sink);
+        foreach(b; name.representation)
+        {
+            sink(b);
+        }
+    }
+    
+    static MqttString fromBytes(R)(R range)
+        if (isInputRange!R && isIntegral!(ElementType!R))
+    {
+        import std.range : takeExactly, drop;
+        import std.array;
+        import std.algorithm : map;
+        import std.traits : isArray;
+
+        MqttString res;
+
+        auto length = MqttShort.fromBytes(range);
+        if (isArray!R)
+            res.name = range.drop(2).takeExactly(length).map!(a => cast(immutable char)a).array;
+        else
+            res.name = range.takeExactly(length).map!(a => cast(immutable char)a).array;
+
+        return res;
+    }
+    
+    unittest
+    {
+        import std.array;
+        import std.string : representation;
+        import std.range;
+        
+        auto name = MqttString("test");
+        assert(name == "test");
+        
+        auto bytes = appender!(ubyte[]);
+        name.toBytes(a => bytes.put(a));
+        
+        assert(bytes.data.length == 6);
+        assert(bytes.data[0] == 0);
+        assert(bytes.data[1] == 4);
+        assert(bytes.data[2..$] == "test".representation);
+        
+        name = MqttString.fromBytes(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
+        assert(name == "randomname");
+
+        auto range = inputRangeObject(cast(ubyte[])[0x00, 0x04] ~ "MQTT".representation);
+        name = MqttString.fromBytes(range);
+        assert(name == "MQTT");
+    }
+}
+
+/**
+ * After a Network Connection is established by a Client to a Server, 
+ * the first Packet sent from the Client to the Server MUST be a CONNECT Packet.
+ * 
+ * A Client can only send the CONNECT Packet once over a Network Connection. 
+ * The Server MUST process a second CONNECT Packet sent from a Client as a protocol violation and disconnect the Client.
+ * 
+ * The payload contains one or more encoded fields.
+ * They specify a unique Client identifier for the Client, a Will topic, Will Message, User Name and Password.
+ * All but the Client identifier are optional and their presence is determined based on flags in the variable header.
+ */
 struct Connect
 {
     enum flags = 0b0000; // Reserved
@@ -272,63 +404,63 @@ struct ConnAck
 struct Publish
 {
     FixedHeader header;
-
+    MqttShort packetId; // if QoS > 0
 }
 
 struct PubAck
 {
     enum flags = 0b0000; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct PubRect
 {
     enum flags = 0b0000; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct PubRel
 {
     enum flags = 0b0010; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct PubComp
 {
     enum flags = 0b0000; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct Subscribe
 {
     enum flags = 0b0010; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct SubAck
 {
     enum flags = 0b0000; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct Unsubscribe
 {
     enum flags = 0b0010; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct UnsubAck
 {
     enum flags = 0b0000; // Reserved
     FixedHeader header;
-
+    MqttShort packetId;
 }
 
 struct PingReq
