@@ -265,6 +265,7 @@ unittest
     import std.array;
 
     auto con = Connect();
+    con.clientIdentifier = "testclient";
 
     auto buffer = appender!(byte[]);
 

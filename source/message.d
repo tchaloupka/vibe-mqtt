@@ -352,6 +352,12 @@ void checkPacket(T)(auto ref in T packet) pure
         enforce(packet.header == (value & mask), "Wrong header");
     }
 
+    static if (__traits(hasMember, T, "clientIdentifier"))
+    {
+        enforce(packet.clientIdentifier.length > 0 && packet.clientIdentifier.length < 24,
+            "Client Identifier SHOULD be 1 to 23 characters long");
+    }
+
     static if (is(T == ConnectFlags))
     {
         enforce(will || (willQoS == QoSLevel.AtMostOnce && !willRetain), 
@@ -366,7 +372,7 @@ void checkPacket(T)(auto ref in T packet) pure
             format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
         enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
-
+        enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
     }
 }
 
