@@ -29,6 +29,9 @@
  */
 module mqttd.message;
 
+import std.range;
+import std.traits : isIntegral;
+
 version (unittest)
 {
     import std.stdio;
@@ -104,60 +107,7 @@ class PacketFormatException : Exception
     }
 }
 
-/**
- * The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
- * http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Table_2.2_-
- */
-struct FixedHeaderFlags
-{
-    import std.traits : isIntegral;
-
-    /// Duplicate delivery of a PUBLISH Control Packet
-    bool dup;
-
-    /// Quality Of Service for a message
-    QoSLevel qos;
-    
-    /// PUBLISH Retain flag 
-    bool retain;
-
-    @safe @nogc
-    @property ubyte flags() const pure nothrow
-    {
-        return cast(ubyte)((dup ? 0x08 : 0x00) | (retain ? 0x01 : 0x00) | (qos << 1));
-    }
-
-    @safe @nogc
-    @property void flags(ubyte value) pure nothrow
-    {
-        dup = (value & 0x08) == 0x08;
-        retain = (value & 0x01) == 0x01;
-        qos = cast(QoSLevel)((value >> 1) & 0x03);
-    }
-
-    this(bool dup, QoSLevel qos, bool retain)
-    {
-        this.dup = dup;
-        this.retain = retain;
-        this.qos = qos;
-    }
-
-    this(T)(T value) if(isIntegral!T)
-    {
-        this.flags = cast(ubyte)value;
-    }
-
-    alias flags this;
-    
-    unittest
-    {
-        assert(FixedHeaderFlags(true, QoSLevel.Reserved, true) == 0x0F);
-        FixedHeaderFlags flags = 0x0F;
-        assert(flags.dup);
-        assert(flags.retain);
-        assert(flags.qos == QoSLevel.Reserved);
-    }
-}
+enum bool canDecode(R) = isInputRange!R && isIntegral!(ElementType!R);
 
 /**
  * Each MQTT Control Packet contains a fixed header.
@@ -166,14 +116,17 @@ struct FixedHeaderFlags
  */
 struct FixedHeader
 {
-    import std.range;
-    import std.traits : isIntegral, isUnsigned;
-
     /// Represented as a 4-bit unsigned value
     PacketType type;
 
-    /// The remaining bits [3-0] of byte 1 in the fixed header contain flags specific to each MQTT Control Packet type
-    FixedHeaderFlags flags;
+    /// Duplicate delivery of a PUBLISH Control Packet
+    bool dup;
+    
+    /// Quality Of Service for a message
+    QoSLevel qos;
+    
+    /// PUBLISH Retain flag 
+    bool retain;
 
     /**
      * The Remaining Length is the number of bytes remaining within the current packet, 
@@ -182,9 +135,47 @@ struct FixedHeader
      */
     int length;
 
+    @safe @nogc
+    @property ubyte flags() const pure nothrow
+    {
+        return cast(ubyte)((type << 4) | (dup ? 0x08 : 0x00) | (retain ? 0x01 : 0x00) | (qos << 1));
+    }
+
+    @safe @nogc
+    @property void flags(ubyte value) pure nothrow
+    {
+        type = cast(PacketType)(value >> 4);
+        dup = (value & 0x08) == 0x08;
+        retain = (value & 0x01) == 0x01;
+        qos = cast(QoSLevel)((value >> 1) & 0x03);
+    }
+
+    alias flags this;
+
+    this(PacketType type, bool dup, QoSLevel qos, bool retain, int length = 0)
+    {
+        this.type = type;
+        this.dup = dup;
+        this.retain = retain;
+        this.qos = qos;
+        this.length = length;
+    }
+
+    this(T)(PacketType type, T flags, int length = 0) if(isIntegral!T)
+    {
+        this.flags = cast(ubyte)flags;
+        this.type = type;
+        this.length = length;
+    }
+
+    this(T)(T value) if(isIntegral!T)
+    {
+        this.flags = cast(ubyte)value;
+    }
+
     void toBytes(scope void delegate(ubyte) sink) const
     {
-        sink(cast(ubyte)(type << 4 | flags));
+        sink(flags);
 
         int tmp = length;
         do
@@ -196,16 +187,12 @@ struct FixedHeader
         } while (tmp > 0);
     }
 
-    static FixedHeader fromBytes(R)(R range)
-        if (isInputRange!R && isIntegral!(ElementType!R) && isUnsigned!(ElementType!R))
+    static FixedHeader fromBytes(R)(R range) if (canDecode!R)
     {
         FixedHeader header;
 
-        ubyte first = range.front;
+        header.flags = range.front;
         range.popFront();
-
-        header.type = cast(PacketType)(first >> 4);
-        header.flags = first;
 
         int multiplier = 1;
         ubyte digit;
@@ -225,7 +212,15 @@ struct FixedHeader
     {
         import std.array;
 
-        auto header = FixedHeader(PacketType.CONNECT, FixedHeaderFlags(0x0F), 255);
+        assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
+
+        FixedHeader header = 0x0F;
+        assert(header.type == PacketType.RESERVED1);
+        assert(header.dup);
+        assert(header.retain);
+        assert(header.qos == QoSLevel.Reserved);
+
+        header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
 
         auto bytes = appender!(ubyte[]);
         header.toBytes(a => bytes.put(a));
@@ -244,21 +239,18 @@ struct FixedHeader
 
         header = FixedHeader.fromBytes(cast(ubyte[])[0x1F, 0x0A]);
         assert(header.type == PacketType.CONNECT);
-        assert(header.flags == 0x0F);
+        assert(header.flags == 0x1F);
         assert(header.length == 10);
 
         header = FixedHeader.fromBytes(cast(ubyte[])[0x20, 0x80, 0x02]);
         assert(header.type == PacketType.CONNACK);
-        assert(header.flags == 0x00);
+        assert(header.flags == 0x20);
         assert(header.length == 256);
     }
 }
 
 struct MqttByte
 {
-    import std.range;
-    import std.traits : isIntegral;
-    
     ubyte num;
     
     alias num this;
@@ -269,8 +261,7 @@ struct MqttByte
     }
 
     @safe @nogc
-    static MqttByte fromBytes(R)(R range) 
-        if (isInputRange!R && isIntegral!(ElementType!R))
+    static MqttByte fromBytes(R)(R range) if (canDecode!R)
     {
         MqttByte res;
         res.num = cast(ubyte)range.front;
@@ -315,9 +306,6 @@ struct MqttByte
 
 struct MqttShort
 {
-    import std.range;
-    import std.traits : isIntegral;
-
     ushort num;
 
     alias num this;
@@ -328,8 +316,7 @@ struct MqttShort
         sink(cast(ubyte) num);
     }
 
-    static MqttShort fromBytes(R)(R range) 
-        if (isInputRange!R && isIntegral!(ElementType!R))
+    static MqttShort fromBytes(R)(R range) if (canDecode!R)
     {
         MqttShort res;
         res.num |= cast(ushort)(range.front << 8);
@@ -370,9 +357,6 @@ struct MqttShort
 
 struct MqttString
 {
-    import std.range;
-    import std.traits : isIntegral;
-
     string name;
 
     alias name this;
@@ -391,8 +375,7 @@ struct MqttString
         }
     }
     
-    static MqttString fromBytes(R)(R range)
-        if (isInputRange!R && isIntegral!(ElementType!R))
+    static MqttString fromBytes(R)(R range) if (canDecode!R)
     {
         import std.range : takeExactly, drop, refRange;
         import std.array;
@@ -440,9 +423,6 @@ struct MqttString
  */
 struct ConnectFlags
 {
-    import std.range;
-    import std.traits : isIntegral;
-
     /**
      * If the User Name Flag is set to 0, a user name MUST NOT be present in the payload.
      * If the User Name Flag is set to 1, a user name MUST be present in the payload.
@@ -592,8 +572,7 @@ struct ConnectFlags
         sink(flags);
     }
     
-    static ConnectFlags fromBytes(R)(R range) 
-        if (isInputRange!R && isIntegral!(ElementType!R))
+    static ConnectFlags fromBytes(R)(R range) if (canDecode!R)
     {
         ConnectFlags res;
         res.flags = cast(ubyte)range.front;
@@ -659,8 +638,6 @@ struct ConnectFlags
  */
 struct Connect
 {
-    enum flags = 0b0000; // Reserved
-
     FixedHeader header;
 
     /// The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”
@@ -704,95 +681,208 @@ struct Connect
      * The maximum value is 18 hours 12 minutes and 15 seconds. 
      */
     MqttShort keepAlive;
+
+    /// Client Identifier
+    MqttString clientIdentifier;
+
+    /// Will Topic
+    MqttString willTopic;
+
+    /// Will Message
+    MqttString willMessage;
+
+    /// User Name
+    MqttString userName;
+
+    /// Password
+    MqttString password;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header != 0x10) return false;
+
+        return true;
+    }
 }
 
 struct ConnAck
 {
-    enum flags  = 0b0000; // Reserved
     FixedHeader header;
 
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.CONNACK || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct Publish
 {
     FixedHeader header;
     MqttShort packetId; // if QoS > 0
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PUBLISH) return false;
+        
+        return true;
+    }
 }
 
 struct PubAck
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PUBACK || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
-struct PubRect
+struct PubRec
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PUBREC || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct PubRel
 {
-    enum flags = 0b0010; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PUBREL || header.flags != 0x02) return false;
+        
+        return true;
+    }
 }
 
 struct PubComp
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PUBCOMP || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct Subscribe
 {
-    enum flags = 0b0010; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.SUBSCRIBE || header.flags != 0x02) return false;
+        
+        return true;
+    }
 }
 
 struct SubAck
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.SUBACK || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct Unsubscribe
 {
-    enum flags = 0b0010; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.UNSUBSCRIBE || header.flags != 0x02) return false;
+        
+        return true;
+    }
 }
 
 struct UnsubAck
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
     MqttShort packetId;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.UNSUBACK || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct PingReq
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PINGREQ || header.flags != 0x00) return false;
+        
+        return true;
+    }
 
 }
 
 struct PingResp
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
 
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.PINGRESP || header.flags != 0x00) return false;
+        
+        return true;
+    }
 }
 
 struct Disconnect
 {
-    enum flags = 0b0000; // Reserved
     FixedHeader header;
+
+    @safe @nogc
+    @property bool isValid() const pure nothrow
+    {
+        if (header.type != PacketType.DISCONNECT || header.flags != 0x00) return false;
+        
+        return true;
+    }
 
 }
 
