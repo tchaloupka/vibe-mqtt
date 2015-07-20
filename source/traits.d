@@ -41,6 +41,10 @@ enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
         || is(T == PingReq) || is(T == PingResp)
         || is(T == Disconnect);
 
+/// Can T be read with Reader?
+enum bool canRead(T) = is(T == ubyte) || is(T == ushort) || is(T == string) 
+    || is(T == FixedHeader) || is(T == ConnectFlags);
+
 /// Has Fixed Header member
 enum bool hasFixedHeader(T) = is(typeof(()
         {
@@ -49,7 +53,7 @@ enum bool hasFixedHeader(T) = is(typeof(()
         }));
 
 /// Range type Mqtt packed can be deserialized from
-enum bool canDeserializeFrom(R) = isInputRange!R && isIntegral!(ElementType!R);
+enum bool canDeserializeFrom(R) = isInputRange!R && isIntegral!(ElementType!R) && !isInfinite!R;
 
 enum bool canSerializeTo(R) = isOutputRange!(R, ubyte) &&
             is(typeof(() { auto r = R(); r.clear(); const(ubyte)[] d = r.data; }));

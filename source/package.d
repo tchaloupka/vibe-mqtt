@@ -30,6 +30,6 @@
 module mqttd;
 
 import mqttd.messages;
-import mqttd.factory;
+import mqttd.serialization;
 import mqttd.traits;
 

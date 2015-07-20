@@ -97,7 +97,7 @@ enum QoSLevel : ubyte
 
 struct Condition
 {
-	string cond;
+    string cond;
 }
 
 /**
@@ -391,6 +391,7 @@ void checkPacket(T)(auto ref in T packet) pure
     }
 }
 
+//TODO: Replace with Writer and serialize
 /// Write item bytes to delegate sink
 void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
 {
