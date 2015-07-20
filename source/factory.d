@@ -45,10 +45,9 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
 {
     import std.exception : enforce;
 
-    writeln(R.stringof);
-
+    // wrap it up to RefRange if needed to avoid problems with consuming different types of range
     static if (is(R == RefRange!TL, TL)) alias wrapped = range;
-    else auto wrapped = refRange(&range); // to avoid problems with consuming different types of range
+    else auto wrapped = refRange(&range);
 
     ubyte nextByte()
     {
@@ -79,9 +78,6 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
 
         auto length = deserialize!ushort(wrapped);
         res = wrapped.takeExactly(length).map!(a => cast(immutable char)a).array;
-
-        //TODO: Solve why this is needed
-        wrapped.popFrontN(length);
     }
     else static if (is(T == ConnectFlags))
     {
@@ -113,8 +109,6 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
         {
             res.willTopic = deserialize!string(wrapped);
             res.willMessage = deserialize!string(wrapped);
-
-            writeln(res);
         }
         if (res.connectFlags.userName)
         {
@@ -147,162 +141,162 @@ void serialize(T)(T msg, scope void delegate(ubyte) sink)
     msg.toBytes(sink);
 }
 
-///// Fixed header tests
-//unittest
-//{
-//    import std.array;
-//    
-//    assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
-//    
-//    FixedHeader header = 0x0F;
-//    assert(header.type == PacketType.RESERVED1);
-//    assert(header.dup);
-//    assert(header.retain);
-//    assert(header.qos == QoSLevel.Reserved);
-//    
-//    header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
-//    
-//    auto bytes = appender!(ubyte[]);
-//    header.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 3);
-//    assert(bytes.data[0] == 0x1F);
-//    assert(bytes.data[1] == 0xFF);
-//    assert(bytes.data[2] == 0x01);
-//    
-//    header.length = 10;
-//    bytes.clear();
-//    header.toBytes(a => bytes.put(a));
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0x1F);
-//    assert(bytes.data[1] == 0x0A);
-//    
-//    header = deserialize!FixedHeader(cast(ubyte[])[0x1F, 0x0A]);
-//    assert(header.type == PacketType.CONNECT);
-//    assert(header.flags == 0x1F);
-//    assert(header.length == 10);
-//    
-//    header = deserialize!FixedHeader(cast(ubyte[])[0x20, 0x80, 0x02]);
-//    assert(header.type == PacketType.CONNACK);
-//    assert(header.flags == 0x20);
-//    assert(header.length == 256);
-//}
-//
-///// ubyte tests
-//unittest
-//{
-//    import std.array;
-//    
-//    ubyte id = 10;
-//    auto bytes = appender!(ubyte[]);
-//    id.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 0x0A);
-//    
-//    id = 0x2B;
-//    bytes.clear();
-//    
-//    id.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 0x2B);
-//    
-//    id = deserialize!ubyte([0x11]);
-//    assert(id == 0x11);
-//}
-//
-///// ushort tests
-//unittest
-//{
-//    import std.array;
-//    
-//    ushort id = 1;
-//    auto bytes = appender!(ubyte[]);
-//    id.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0);
-//    assert(bytes.data[1] == 1);
-//    
-//    id = 0x1A2B;
-//    bytes.clear();
-//    
-//    id.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0x1A);
-//    assert(bytes.data[1] == 0x2B);
-//    
-//    id = deserialize!ushort([0x11, 0x22]);
-//    assert(id == 0x1122);
-//}
-//
-///// string tests
-//unittest
-//{
-//    import std.array;
-//    import std.string : representation;
-//    import std.range;
-//    
-//    auto name = "test";
-//    auto bytes = appender!(ubyte[]);
-//    name.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 6);
-//    assert(bytes.data[0] == 0);
-//    assert(bytes.data[1] == 4);
-//    assert(bytes.data[2..$] == "test".representation);
-//    
-//    name = deserialize!string(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
-//    assert(name == "randomname");
-//    
-//    auto range = inputRangeObject(cast(ubyte[])[0x00, 0x04] ~ "MQTT".representation);
-//    name = deserialize!string(range);
-//    assert(name == "MQTT");
-//}
-//
-///// ConnectFlags test
-//unittest
-//{
-//    import std.array;
-//    
-//    ConnectFlags flags;
-//    
-//    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-//    assert(flags == 0);
-//    
-//    flags = 1; //reserved - no change
-//    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-//    assert(flags == 0);
-//    
-//    flags = 2;
-//    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
-//    
-//    flags = 4;
-//    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
-//    
-//    flags = 24;
-//    assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
-//    
-//    flags = 32;
-//    assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
-//    
-//    flags = 64;
-//    assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
-//    
-//    flags = 128;
-//    assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
-//    
-//    auto bytes = appender!(ubyte[]);
-//    flags.toBytes(a => bytes.put(a));
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 128);
-//    
-//    flags = deserialize!ConnectFlags([2]);
-//    assert(flags.cleanSession);
-//}
+/// Fixed header tests
+unittest
+{
+   import std.array;
+   
+   assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
+   
+   FixedHeader header = 0x0F;
+   assert(header.type == PacketType.RESERVED1);
+   assert(header.dup);
+   assert(header.retain);
+   assert(header.qos == QoSLevel.Reserved);
+   
+   header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
+   
+   auto bytes = appender!(ubyte[]);
+   header.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 3);
+   assert(bytes.data[0] == 0x1F);
+   assert(bytes.data[1] == 0xFF);
+   assert(bytes.data[2] == 0x01);
+   
+   header.length = 10;
+   bytes.clear();
+   header.toBytes(a => bytes.put(a));
+   assert(bytes.data.length == 2);
+   assert(bytes.data[0] == 0x1F);
+   assert(bytes.data[1] == 0x0A);
+   
+   header = deserialize!FixedHeader(cast(ubyte[])[0x1F, 0x0A]);
+   assert(header.type == PacketType.CONNECT);
+   assert(header.flags == 0x1F);
+   assert(header.length == 10);
+   
+   header = deserialize!FixedHeader(cast(ubyte[])[0x20, 0x80, 0x02]);
+   assert(header.type == PacketType.CONNACK);
+   assert(header.flags == 0x20);
+   assert(header.length == 256);
+}
+
+/// ubyte tests
+unittest
+{
+   import std.array;
+   
+   ubyte id = 10;
+   auto bytes = appender!(ubyte[]);
+   id.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 1);
+   assert(bytes.data[0] == 0x0A);
+   
+   id = 0x2B;
+   bytes.clear();
+   
+   id.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 1);
+   assert(bytes.data[0] == 0x2B);
+   
+   id = deserialize!ubyte([0x11]);
+   assert(id == 0x11);
+}
+
+/// ushort tests
+unittest
+{
+   import std.array;
+   
+   ushort id = 1;
+   auto bytes = appender!(ubyte[]);
+   id.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 2);
+   assert(bytes.data[0] == 0);
+   assert(bytes.data[1] == 1);
+   
+   id = 0x1A2B;
+   bytes.clear();
+   
+   id.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 2);
+   assert(bytes.data[0] == 0x1A);
+   assert(bytes.data[1] == 0x2B);
+   
+   id = deserialize!ushort([0x11, 0x22]);
+   assert(id == 0x1122);
+}
+
+/// string tests
+unittest
+{
+   import std.array;
+   import std.string : representation;
+   import std.range;
+   
+   auto name = "test";
+   auto bytes = appender!(ubyte[]);
+   name.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 6);
+   assert(bytes.data[0] == 0);
+   assert(bytes.data[1] == 4);
+   assert(bytes.data[2..$] == "test".representation);
+   
+   name = deserialize!string(cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation);
+   assert(name == "randomname");
+   
+   auto range = inputRangeObject(cast(ubyte[])[0x00, 0x04] ~ "MQTT".representation);
+   name = deserialize!string(range);
+   assert(name == "MQTT");
+}
+
+/// ConnectFlags test
+unittest
+{
+   import std.array;
+   
+   ConnectFlags flags;
+   
+   assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+   assert(flags == 0);
+   
+   flags = 1; //reserved - no change
+   assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+   assert(flags == 0);
+   
+   flags = 2;
+   assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
+   
+   flags = 4;
+   assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
+   
+   flags = 24;
+   assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
+   
+   flags = 32;
+   assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
+   
+   flags = 64;
+   assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
+   
+   flags = 128;
+   assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
+   
+   auto bytes = appender!(ubyte[]);
+   flags.toBytes(a => bytes.put(a));
+   
+   assert(bytes.data.length == 1);
+   assert(bytes.data[0] == 128);
+   
+   flags = deserialize!ConnectFlags([2]);
+   assert(flags.cleanSession);
+}
 
 /// Connect message tests
 unittest
@@ -339,5 +333,7 @@ unittest
 
     //auto con2 = deserialize!Connect(buffer.data);
     auto con2 = deserialize!Connect(tee!(a=>writef("%.02x ", a))(buffer.data));
+	writeln();
+	writeln(con2);
     assert(con == con2);
 }

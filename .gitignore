@@ -6,4 +6,4 @@ __dummy.html
 *.obj
 *.userprefs
 dub.selections.json
-__test__library__
+__test__library__*
