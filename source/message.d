@@ -38,11 +38,11 @@ enum string MQTT_PROTOCOL_NAME = "MQTT";
 
 /// Is provided type one of Mqtt packet types?
 enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
-			|| is(T == Publish) || is(T == PubAck) || is(T == PubRec) || is(T == PubRel) || is(T == PubComp)
-			|| is(T == Subscribe) || is(T == SubAck)
-			|| is(T == Unsubscribe) || is(T == UnsubAck)
-			|| is(T == PingReq) || is(T == PingResp)
-			|| is(T == Disconnect);
+    || is(T == Publish) || is(T == PubAck) || is(T == PubRec) || is(T == PubRel) || is(T == PubComp)
+    || is(T == Subscribe) || is(T == SubAck)
+    || is(T == Unsubscribe) || is(T == UnsubAck)
+    || is(T == PingReq) || is(T == PingResp)
+    || is(T == Disconnect);
 
 /**
  * MQTT Control Packet type
@@ -524,7 +524,7 @@ struct Connect
 
     /// Will Topic
     @Condition("connectFlags.will")
-	string willTopic;
+    string willTopic;
 
     /// Will Message
     string willMessage;
