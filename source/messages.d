@@ -27,22 +27,16 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module mqttd.message;
+module mqttd.messages;
 
 import std.range;
 import std.exception : enforce;
 import std.traits : isIntegral;
 
+import mqttd.traits;
+
 enum ubyte MQTT_PROTOCOL_LEVEL_3_1_1 = 0x04;
 enum string MQTT_PROTOCOL_NAME = "MQTT";
-
-/// Is provided type one of Mqtt packet types?
-enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
-    || is(T == Publish) || is(T == PubAck) || is(T == PubRec) || is(T == PubRel) || is(T == PubComp)
-    || is(T == Subscribe) || is(T == SubAck)
-    || is(T == Unsubscribe) || is(T == UnsubAck)
-    || is(T == PingReq) || is(T == PingResp)
-    || is(T == Disconnect);
 
 /**
  * MQTT Control Packet type

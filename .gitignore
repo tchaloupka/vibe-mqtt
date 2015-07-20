@@ -10,3 +10,4 @@ __test__library__*
 *.sln
 *.visualdproj
 .vs
+profilegc.log

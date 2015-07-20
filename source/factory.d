@@ -32,16 +32,50 @@ module mqttd.factory;
 import std.string : format;
 import std.range;
 
-import mqttd.message;
+import mqttd.messages;
+import mqttd.traits;
+import mqttd.serializer;
 
 version (unittest)
 {
     import std.stdio;
 }
 
-enum bool canDecode(R) = isInputRange!R && isIntegral!(ElementType!R);
+void serialize(T)(T msg, scope void delegate(ubyte) sink)
+{
+    //set remaining packet length
+    msg.setRemainingLength;
+    
+    //check if is valid
+    try msg.checkPacket();
+    catch (Exception ex) throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg));
+    
+    msg.toBytes(sink);
+}
 
-T deserialize(T, R)(auto ref R range) if (canDecode!R)
+/// Serialize given Mqtt packet
+T serialize(S, T)(ref S ser, ref T val) if (isMqttPacket!T && is(S == Serializer!O, O))
+{
+    T res;
+
+    static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
+
+    foreach(member; __traits(allMembers, T))
+    {
+        //makes sure to only serialise members that make sense, i.e. data
+        enum isMemberVariable = is(typeof(() {
+                    __traits(getMember, val, member) = __traits(getMember, val, member).init;
+                }));
+        static if(isMemberVariable)
+        {
+            writeln(member);
+        }
+    }
+
+    return res;
+}
+
+T deserialize(T, R)(auto ref R range) if (canDeserializeFrom!R)
 {
     import std.exception : enforce;
 
@@ -116,7 +150,6 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
             if (res.connectFlags.password) res.password = deserialize!string(wrapped);
         }
 
-        writeln(res);
         enforce(wrapped.empty, new PacketFormatException("There is more data available than specified in header"));
     }
     else implemented = false;
@@ -128,18 +161,6 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
         return res;
     }
     assert(0, "Not implemented deserialize for " ~ T.stringof);
-}
-
-void serialize(T)(T msg, scope void delegate(ubyte) sink)
-{
-    //set remaining packet length
-    msg.setRemainingLength;
-
-    //check if is valid
-    try msg.checkPacket();
-    catch (Exception ex) throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg));
-
-    msg.toBytes(sink);
 }
 
 /// Fixed header tests
@@ -332,6 +353,10 @@ unittest
     //auto con2 = deserialize!Connect(buffer.data);
     auto con2 = deserialize!Connect(tee!(a=>writef("%.02x ", a))(buffer.data));
 	writeln();
-	writeln(con2);
+	//writeln(con2);
     assert(con == con2);
+
+    buffer.clear();
+    auto s = serializer(buffer);
+    s.serialize(con);
 }

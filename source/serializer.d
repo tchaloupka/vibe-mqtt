@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/package.d
+ * /home/tomas/workspace/mqtt-d/source/serializer.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
@@ -27,9 +27,25 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module mqttd;
+module mqttd.serializer;
 
-import mqttd.messages;
-import mqttd.factory;
+import std.range;
 import mqttd.traits;
+
+auto serializer(R)(auto ref R writer) if (canSerializeTo!(R))
+{
+    return Serializer!R(writer);
+}
+
+struct Serializer(R) if (canSerializeTo!(R))
+{
+    this(R writer)
+    {
+        _output = writer;
+    }
+
+private:
+    
+    R _output;
+}
 

@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/package.d
+ * /home/tomas/workspace/mqtt-d/source/traits.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
@@ -27,9 +27,30 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module mqttd;
+module mqttd.traits;
+
+import std.range;
 
 import mqttd.messages;
-import mqttd.factory;
-import mqttd.traits;
+
+/// Is one of Mqtt packet types?
+enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
+    || is(T == Publish) || is(T == PubAck) || is(T == PubRec) || is(T == PubRel) || is(T == PubComp)
+        || is(T == Subscribe) || is(T == SubAck)
+        || is(T == Unsubscribe) || is(T == UnsubAck)
+        || is(T == PingReq) || is(T == PingResp)
+        || is(T == Disconnect);
+
+/// Has Fixed Header member
+enum bool hasFixedHeader(T) = is(typeof(()
+        {
+            auto obj = T.init;
+            FixedHeader h = obj.header;
+        }));
+
+/// Range type Mqtt packed can be deserialized from
+enum bool canDeserializeFrom(R) = isInputRange!R && isIntegral!(ElementType!R);
+
+enum bool canSerializeTo(R) = isOutputRange!(R, ubyte) &&
+            is(typeof(() { auto r = R(); r.clear(); const(ubyte)[] d = r.data; }));
 
