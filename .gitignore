@@ -7,3 +7,6 @@ __dummy.html
 *.userprefs
 dub.selections.json
 __test__library__*
+*.sln
+*.visualdproj
+.vs
