@@ -116,6 +116,7 @@ T deserialize(T, R)(auto ref R range) if (canDecode!R)
             if (res.connectFlags.password) res.password = deserialize!string(wrapped);
         }
 
+        writeln(res);
         enforce(wrapped.empty, new PacketFormatException("There is more data available than specified in header"));
     }
     else implemented = false;
@@ -327,9 +328,6 @@ unittest
             0x00, 0x04, //username length
             0x75, 0x73, 0x65, 0x72 //user text
         ]);
-
-    //tee!(a=>write(a, " "))(buffer.data).array;
-    //writeln();
 
     //auto con2 = deserialize!Connect(buffer.data);
     auto con2 = deserialize!Connect(tee!(a=>writef("%.02x ", a))(buffer.data));
