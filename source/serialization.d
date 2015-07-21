@@ -176,12 +176,13 @@ unittest
     con.userName = "user";
 
     auto buffer = appender!(ubyte[]);
-	auto wr = writer(buffer);
+    auto wr = writer(buffer);
 
     wr.serialize(con);
 
     assert(wr.data.length == 30);
 
+    writer(data);
     assert(wr.data == cast(ubyte[])[
             0x10, //fixed header
             0x1c, // rest is 30

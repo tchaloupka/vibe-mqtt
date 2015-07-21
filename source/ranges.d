@@ -178,7 +178,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
         else static if (is(T == FixedHeader))
         {
             res.flags = read!ubyte();
-			res.length = 0;
+            res.length = 0;
             
             int multiplier = 1;
             ubyte digit;
@@ -304,7 +304,7 @@ unittest
     assert(bytes.data[0] == 0x1F);
     assert(bytes.data[1] == 0x0A);
 
-	header = [0x1F, 0x0A].read!FixedHeader();
+    header = [0x1F, 0x0A].read!FixedHeader();
     assert(header.type == PacketType.CONNECT);
     assert(header.flags == 0x1F);
     assert(header.length == 10);
@@ -320,7 +320,7 @@ unittest
 {
     import std.array;
     
-	ConnectFlags flags = ConnectFlags(128);
+    ConnectFlags flags = ConnectFlags(128);
 
     auto bytes = appender!(ubyte[]);
     bytes.write(flags);

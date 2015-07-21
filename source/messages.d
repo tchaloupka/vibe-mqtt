@@ -398,7 +398,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T == ushort)) return 2;
     else static if (is(T == string)) return cast(uint)(2 + item.length);
     else static if (is(T == ConnectFlags)) return 1;
-	else static if (is(T == FixedHeader)) return 0;
+    else static if (is(T == FixedHeader)) return 0;
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
 
@@ -502,18 +502,18 @@ struct Connect
 
     /// Will Topic
     @Condition!(a=>a.connectFlags.will)()
-	string willTopic;
+    string willTopic;
 
     /// Will Message
-	@Condition!(a=>a.connectFlags.will)()
-	string willMessage;
+    @Condition!(a=>a.connectFlags.will)()
+    string willMessage;
 
     /// User Name
-	@Condition!(a=>a.connectFlags.userName)()
+    @Condition!(a=>a.connectFlags.userName)()
     string userName;
 
     /// Password
-	@Condition!(a=>a.connectFlags.password)()
+    @Condition!(a=>a.connectFlags.password)()
     string password;
 
     static Connect opCall()
