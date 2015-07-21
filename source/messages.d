@@ -35,9 +35,9 @@ import std.traits : isIntegral;
 
 import mqttd.traits;
 
-struct Condition
+struct Condition(alias C)
 {
-    string cond;
+    static alias C cond;
 }
 
 /**
@@ -111,6 +111,7 @@ enum QoSLevel : ubyte
     Reserved = 0x3
 }
 
+//TODO: Change to properties so no unneeded data stored
 /**
  * Each MQTT Control Packet contains a fixed header.
  * 
@@ -360,6 +361,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T == ushort)) return 2;
     else static if (is(T == string)) return cast(uint)(2 + item.length);
     else static if (is(T == ConnectFlags)) return 1;
+	else static if (is(T == FixedHeader)) return 0;
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
 
@@ -462,16 +464,19 @@ struct Connect
     string clientIdentifier;
 
     /// Will Topic
-    @Condition("connectFlags.will")
-    string willTopic;
+    @Condition!(a=>a.connectFlags.will)()
+	string willTopic;
 
     /// Will Message
-    string willMessage;
+	@Condition!(a=>a.connectFlags.will)()
+	string willMessage;
 
     /// User Name
+	@Condition!(a=>a.connectFlags.userName)()
     string userName;
 
     /// Password
+	@Condition!(a=>a.connectFlags.password)()
     string password;
 
     static Connect opCall()
@@ -558,4 +563,3 @@ struct Disconnect
 {
     FixedHeader header;
 }
-

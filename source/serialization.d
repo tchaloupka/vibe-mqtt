@@ -31,6 +31,7 @@ module mqttd.serialization;
 
 import std.string : format;
 import std.range;
+import std.typecons;
 
 import mqttd.messages;
 import mqttd.traits;
@@ -43,48 +44,52 @@ void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer
 {
     static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
-	//auto getMembersToSerialize()
-	//{
-	//    import std.algorithm;
-	//    foreach(member; __traits(allMembers, T).map!(a=>a))
-	//    {
-	//        //makes sure to only serialise members that make sense, i.e. data
-	//        enum isMemberVariable = is(typeof(() {
-	//            __traits(getMember, val, member) = __traits(getMember, val, member).init;
-	//        }));
-	//        static if(isMemberVariable)
-	//        {
-	//            writeln(member);
-	//
-	//            //TODO: Implement serialization
-	//        }
-	//    }
-	//}
-
 	/// Computes and sets remaining length to the package header field
-	@safe @nogc
-	void setRemainingLength() pure nothrow
+	auto getRemainingLength()
 	{
 		uint len;
-		static if (is(T == Connect))
-		{
-			len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
-				item.keepAlive.itemLength + item.clientIdentifier.itemLength;
+		//static if (is(T == Connect))
+		//{
+		//    len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
+		//        item.keepAlive.itemLength + item.clientIdentifier.itemLength;
+		//
+		//    if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
+		//    if (item.connectFlags.userName)
+		//    {
+		//        len += item.userName.itemLength;
+		//        if (item.connectFlags.password) len += item.password.itemLength;
+		//    }
+		//}
 
-			if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
-			if (item.connectFlags.userName)
+		import std.typetuple;
+
+		foreach(member; __traits(allMembers, T))
+		{
+			enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
+
+			static if(isMemberVariable)
 			{
-				len += item.userName.itemLength;
-				if (item.connectFlags.password) len += item.password.itemLength;
+				foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
+				{
+					enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
+					static if(isCondition!(typeof(attr)))
+					{
+						//check condition
+						//writeln(member, " has Condition - ", idx);
+						auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
+						if(!attribute.cond(item)) continue;
+					}
+				}
+
+				len += itemLength(__traits(getMember, item, member));
 			}
 		}
-		else assert(0, "Not implemented setRemainingLength for " ~ T.stringof);
 
-		item.header.length = len;
+		return len;
 	}
 
     //set remaining packet length
-    setRemainingLength();
+    item.header.length = getRemainingLength();
 
     //check if is valid
     try item.checkPacket();

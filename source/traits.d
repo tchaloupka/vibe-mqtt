@@ -62,3 +62,4 @@ enum bool canDeserializeFrom(R) = isInputRange!R && isIntegral!(ElementType!R) &
 enum bool canSerializeTo(R) = isOutputRange!(R, ubyte) &&
             is(typeof(() { auto r = R(); r.clear(); const(ubyte)[] d = r.data; }));
 
+enum bool isCondition(C) = is(C : Condition!C, alias C);
