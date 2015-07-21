@@ -36,6 +36,11 @@ import mqttd.messages;
 debug import std.stdio;
 debug import std.string : format;
 
+void write(R, T)(auto ref R output, T val) if (canSerializeTo!(R))
+{
+    writer(output).write(val);
+}
+
 auto writer(R)(auto ref R output) if (canSerializeTo!(R))
 {
     return Writer!R(output);
@@ -65,6 +70,53 @@ struct Writer(R) if (canSerializeTo!(R))
     {
         _output.put(val);
     }
+
+	static if(__traits(hasMember, R, "data"))
+	{
+		@property auto data()
+		{
+			return _output.data();
+		}
+	}
+
+	void write(T)(T val) if (canWrite!T)
+	{
+		static if (is(T == ubyte))
+		{
+			put(val);
+		}
+		else static if (is(T == ushort))
+		{
+			put(cast(ubyte) (val >> 8));
+			put(cast(ubyte) val);
+		}
+		else static if (is(T == string))
+		{
+			import std.string : representation;
+
+			enforce(val.length <= 0xFF, "String too long: ", val);
+
+			write((cast(ushort)val.length));
+			foreach(b; val.representation) put(b);
+		}
+		else static if (is(T == FixedHeader))
+		{
+			put(val.flags);
+
+			int tmp = val.length;
+			do
+			{
+				byte digit = tmp % 128;
+				tmp /= 128;
+				if (tmp > 0) digit |= 0x80;
+				put(digit);
+			} while (tmp > 0);
+		}
+		else static if (is(T == ConnectFlags))
+		{
+			put(val.flags);
+		}
+	}
 
 private:
     
@@ -126,6 +178,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
         else static if (is(T == FixedHeader))
         {
             res.flags = read!ubyte();
+			res.length = 0;
             
             int multiplier = 1;
             ubyte digit;
@@ -155,7 +208,7 @@ unittest
     
     ubyte id = 10;
     auto bytes = appender!(ubyte[]);
-    id.toBytes(a => bytes.put(a));
+    bytes.write(id);
     
     assert(bytes.data.length == 1);
     assert(bytes.data[0] == 0x0A);
@@ -163,7 +216,7 @@ unittest
     id = 0x2B;
     bytes.clear();
     
-    id.toBytes(a => bytes.put(a));
+    bytes.write(id);
     
     assert(bytes.data.length == 1);
     assert(bytes.data[0] == 0x2B);
@@ -182,7 +235,7 @@ unittest
     
     ushort id = 1;
     auto bytes = appender!(ubyte[]);
-    id.toBytes(a => bytes.put(a));
+    bytes.write(id);
     
     assert(bytes.data.length == 2);
     assert(bytes.data[0] == 0);
@@ -191,7 +244,7 @@ unittest
     id = 0x1A2B;
     bytes.clear();
     
-    id.toBytes(a => bytes.put(a));
+    bytes.write(id);
     
     assert(bytes.data.length == 2);
     assert(bytes.data[0] == 0x1A);
@@ -210,7 +263,7 @@ unittest
     
     auto name = "test";
     auto bytes = appender!(ubyte[]);
-    name.toBytes(a => bytes.put(a));
+    bytes.write(name);
     
     assert(bytes.data.length == 6);
     assert(bytes.data[0] == 0);
@@ -237,7 +290,7 @@ unittest
     header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
 
     auto bytes = appender!(ubyte[]);
-    header.toBytes(a => bytes.put(a));
+    bytes.write(header);
 
     assert(bytes.data.length == 3);
     assert(bytes.data[0] == 0x1F);
@@ -246,12 +299,12 @@ unittest
 
     header.length = 10;
     bytes.clear();
-    header.toBytes(a => bytes.put(a));
+    bytes.write(header);
     assert(bytes.data.length == 2);
     assert(bytes.data[0] == 0x1F);
     assert(bytes.data[1] == 0x0A);
 
-    header = [0x1F, 0x0A].read!FixedHeader();
+	header = [0x1F, 0x0A].read!FixedHeader();
     assert(header.type == PacketType.CONNECT);
     assert(header.flags == 0x1F);
     assert(header.length == 10);
@@ -267,35 +320,10 @@ unittest
 {
     import std.array;
     
-    ConnectFlags flags;
-    
-    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-    assert(flags == 0);
-    
-    flags = 1; //reserved - no change
-    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-    assert(flags == 0);
-    
-    flags = 2;
-    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
-    
-    flags = 4;
-    assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
-    
-    flags = 24;
-    assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
-    
-    flags = 32;
-    assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
-    
-    flags = 64;
-    assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
-    
-    flags = 128;
-    assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
-    
+	ConnectFlags flags = ConnectFlags(128);
+
     auto bytes = appender!(ubyte[]);
-    flags.toBytes(a => bytes.put(a));
+    bytes.write(flags);
     
     assert(bytes.data.length == 1);
     assert(bytes.data[0] == 128);

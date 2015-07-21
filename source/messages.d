@@ -35,6 +35,22 @@ import std.traits : isIntegral;
 
 import mqttd.traits;
 
+struct Condition
+{
+    string cond;
+}
+
+/**
+* Exception thrown when package format is somehow malformed
+*/
+class PacketFormatException : Exception
+{
+    this(string msg = null, Throwable next = null)
+    {
+        super(msg, next);
+    }
+}
+
 enum ubyte MQTT_PROTOCOL_LEVEL_3_1_1 = 0x04;
 enum string MQTT_PROTOCOL_NAME = "MQTT";
 
@@ -93,22 +109,6 @@ enum QoSLevel : ubyte
     ExactlyOnce = 0x2,
     /// Reserved – must not be used
     Reserved = 0x3
-}
-
-struct Condition
-{
-    string cond;
-}
-
-/**
- * Exception thrown when package format is somehow malformed
- */
-class PacketFormatException : Exception
-{
-    this(string msg = null, Throwable next = null)
-    {
-        super(msg, next);
-    }
 }
 
 /**
@@ -318,28 +318,38 @@ struct ConnectFlags
     }
     
     alias flags this;
-}
 
-/// Computes and sets remaining length to the package header field
-@safe @nogc
-void setRemainingLength(T)(auto ref T msg) pure nothrow
-{
-    uint len;
-    static if (is(T == Connect))
-    {
-        len = msg.protocolName.itemLength + msg.protocolLevel.itemLength + msg.connectFlags.itemLength + 
-            msg.keepAlive.itemLength + msg.clientIdentifier.itemLength;
-    
-        if (msg.connectFlags.will) len += msg.willTopic.itemLength + msg.willMessage.itemLength;
-        if (msg.connectFlags.userName)
-        {
-            len += msg.userName.itemLength;
-            if (msg.connectFlags.password) len += msg.password.itemLength;
-        }
-    }
-    else assert(0, "Not implemented setRemainingLength for " ~ T.stringof);
-    
-    msg.header.length = len;
+	unittest
+	{
+		import std.array;
+
+		ConnectFlags flags;
+
+		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+		assert(flags == 0);
+
+		flags = 1; //reserved - no change
+		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+		assert(flags == 0);
+
+		flags = 2;
+		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
+
+		flags = 4;
+		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
+
+		flags = 24;
+		assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
+
+		flags = 32;
+		assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
+
+		flags = 64;
+		assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
+
+		flags = 128;
+		assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
+	}
 }
 
 /// Gets required buffer size to encode into
@@ -389,72 +399,6 @@ void checkPacket(T)(auto ref in T packet) pure
         packet.connectFlags.checkPacket();
         enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
     }
-}
-
-//TODO: Replace with Writer and serialize
-/// Write item bytes to delegate sink
-void toBytes(T)(auto ref in T item, scope void delegate(ubyte) sink)
-{
-    //write header
-    static if (__traits(hasMember, T, "header")) item.header.toBytes(sink);
-    static if (is(T == ubyte))
-    {
-        sink(item);
-    }
-    else static if (is(T == ushort))
-    {
-        sink(cast(ubyte) (item >> 8));
-        sink(cast(ubyte) item);
-    }
-    else static if (is(T == string))
-    {
-        import std.string : representation;
-        
-        enforce(item.length <= 0xFF, "String too long: ", item);
-        
-        (cast(ushort)item.length).toBytes(sink);
-        foreach(b; item.representation)
-        {
-            sink(b);
-        }
-    }
-    else static if (is(T == FixedHeader))
-    {
-        sink(item.flags);
-        
-        int tmp = item.length;
-        do
-        {
-            byte digit = tmp % 128;
-            tmp /= 128;
-            if (tmp > 0) digit |= 0x80;
-            sink(digit);
-        } while (tmp > 0);
-    }
-    else static if (is(T == ConnectFlags))
-    {
-        sink(item.flags);
-    }
-    else static if (is(T == Connect))
-    {
-        item.protocolName.toBytes(sink);
-        item.protocolLevel.toBytes(sink);
-        item.connectFlags.toBytes(sink);
-        item.keepAlive.toBytes(sink);
-        item.clientIdentifier.toBytes(sink);
-
-        if (item.connectFlags.will)
-        {
-            item.willTopic.toBytes(sink);
-            item.willMessage.toBytes(sink);
-        }
-        if (item.connectFlags.userName)
-        {
-            item.userName.toBytes(sink);
-            if (item.connectFlags.password) item.password.toBytes(sink);
-        }
-    }
-    else assert(0, "Not implemented toBytes for " ~ T.stringof);
 }
 
 /**

@@ -38,46 +38,82 @@ import mqttd.ranges;
 
 debug import std.stdio;
 
-//TODO: Remove
-void serialize(T)(T msg, scope void delegate(ubyte) sink)
-{
-    //set remaining packet length
-    msg.setRemainingLength;
-    
-    //check if is valid
-    try msg.checkPacket();
-    catch (Exception ex) throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg));
-    
-    msg.toBytes(sink);
-}
-
 /// Serialize given Mqtt packet
-void serialize(W, T)(ref W writer, ref T val) if (isMqttPacket!T && is(W == Writer!Out, Out))
+void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer!Out, Out))
 {
     static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
+	//auto getMembersToSerialize()
+	//{
+	//    import std.algorithm;
+	//    foreach(member; __traits(allMembers, T).map!(a=>a))
+	//    {
+	//        //makes sure to only serialise members that make sense, i.e. data
+	//        enum isMemberVariable = is(typeof(() {
+	//            __traits(getMember, val, member) = __traits(getMember, val, member).init;
+	//        }));
+	//        static if(isMemberVariable)
+	//        {
+	//            writeln(member);
+	//
+	//            //TODO: Implement serialization
+	//        }
+	//    }
+	//}
+
+	/// Computes and sets remaining length to the package header field
+	@safe @nogc
+	void setRemainingLength() pure nothrow
+	{
+		uint len;
+		static if (is(T == Connect))
+		{
+			len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
+				item.keepAlive.itemLength + item.clientIdentifier.itemLength;
+
+			if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
+			if (item.connectFlags.userName)
+			{
+				len += item.userName.itemLength;
+				if (item.connectFlags.password) len += item.password.itemLength;
+			}
+		}
+		else assert(0, "Not implemented setRemainingLength for " ~ T.stringof);
+
+		item.header.length = len;
+	}
+
     //set remaining packet length
-    val.setRemainingLength;
+    setRemainingLength();
 
     //check if is valid
-    try 
-        val.checkPacket();
+    try item.checkPacket();
     catch (Exception ex) 
         throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
-    foreach(member; __traits(allMembers, T))
-    {
-        //makes sure to only serialise members that make sense, i.e. data
-        enum isMemberVariable = is(typeof(() {
-                    __traits(getMember, val, member) = __traits(getMember, val, member).init;
-                }));
-        static if(isMemberVariable)
-        {
-            writeln(member);
+	//TODO: move upper
+	wtr.write(item.header);
 
-            //TODO: Implement serialization
+	static if (is(T == Connect))
+    {
+        wtr.write(item.protocolName);
+        wtr.write(item.protocolLevel);
+        wtr.write(item.connectFlags);
+        wtr.write(item.keepAlive);
+        wtr.write(item.clientIdentifier);
+
+        if (item.connectFlags.will)
+        {
+            wtr.write(item.willTopic);
+            wtr.write(item.willMessage);
+        }
+        if (item.connectFlags.userName)
+        {
+            wtr.write(item.userName);
+            if (item.connectFlags.password) wtr.write(item.password);
         }
     }
+    else assert(0, "Not implemented toBytes for " ~ T.stringof);
 }
 
 T deserialize(T, R)(ref R rdr) if (isMqttPacket!T && is(R == Reader!In, In))
@@ -135,12 +171,13 @@ unittest
     con.userName = "user";
 
     auto buffer = appender!(ubyte[]);
+	auto wr = writer(buffer);
 
-    serialize(con, (ubyte a) { /*writef("%.2x ", a);*/ buffer.put(a); });
+    wr.serialize(con);
 
-    assert(buffer.data.length == 30);
+    assert(wr.data.length == 30);
 
-    assert(buffer.data == cast(ubyte[])[
+    assert(wr.data == cast(ubyte[])[
             0x10, //fixed header
             0x1c, // rest is 30
             0x00, 0x04, //length of MQTT text
@@ -158,8 +195,4 @@ unittest
 
     auto con2 = deserialize!Connect(data);
     assert(con == con2);
-
-    buffer.clear();
-    auto s = writer(buffer);
-    s.serialize(con);
 }
