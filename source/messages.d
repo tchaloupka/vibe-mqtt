@@ -437,6 +437,7 @@ void checkPacket(T)(auto ref in T packet) pure
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
         packet.connectFlags.checkPacket();
         enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
+        enforce(packet.connectFlags.userName || !packet.connectFlags.password > 0, "Username not set, but password is");
     }
 }
 
@@ -513,7 +514,12 @@ struct Connect
     string userName;
 
     /// Password
-    @Condition!(a=>a.connectFlags.password)()
+    //@Condition!(a=>a.connectFlags.password)()
+    @Condition!((a) 
+        {
+            writeln("check = ", a.connectFlags.password);
+            return a.connectFlags.password;
+        })()
     string password;
 
     static Connect opCall()

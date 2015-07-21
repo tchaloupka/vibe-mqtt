@@ -44,49 +44,52 @@ void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer
 {
     static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
-	/// Computes and sets remaining length to the package header field
-	auto getRemainingLength()
-	{
-		uint len;
-		//static if (is(T == Connect))
-		//{
-		//    len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
-		//        item.keepAlive.itemLength + item.clientIdentifier.itemLength;
-		//
-		//    if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
-		//    if (item.connectFlags.userName)
-		//    {
-		//        len += item.userName.itemLength;
-		//        if (item.connectFlags.password) len += item.password.itemLength;
-		//    }
-		//}
+    /// Computes and sets remaining length to the package header field
+    auto getRemainingLength()
+    {
+        uint len;
+        //static if (is(T == Connect))
+        //{
+        //    len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
+        //        item.keepAlive.itemLength + item.clientIdentifier.itemLength;
+        //
+        //    if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
+        //    if (item.connectFlags.userName)
+        //    {
+        //        len += item.userName.itemLength;
+        //        if (item.connectFlags.password) len += item.password.itemLength;
+        //    }
+        //}
 
-		import std.typetuple;
+        import std.typetuple;
 
-		foreach(member; __traits(allMembers, T))
-		{
-			enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
+        writeln("pwd - ", item.connectFlags.password);
 
-			static if(isMemberVariable)
-			{
-				foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
-				{
-					enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
-					static if(isCondition!(typeof(attr)))
-					{
-						//check condition
-						//writeln(member, " has Condition - ", idx);
-						auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
-						if(!attribute.cond(item)) continue;
-					}
-				}
+        foreach(member; __traits(allMembers, T))
+        {
+            enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
 
-				len += itemLength(__traits(getMember, item, member));
-			}
-		}
+            static if(isMemberVariable)
+            {
+                foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
+                {
+                    enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
+                    static if(isCondition!(typeof(attr)))
+                    {
+                        //check condition
+                        //writeln(member, " has Condition - ", idx);
+                        auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
+                        if(!attribute.cond(item)) continue;
+                    }
+                }
 
-		return len;
-	}
+                writeln("add ", member, " - ", itemLength(__traits(getMember, item, member)));
+                len += itemLength(__traits(getMember, item, member));
+            }
+        }
+
+        return len;
+    }
 
     //set remaining packet length
     item.header.length = getRemainingLength();
@@ -96,10 +99,10 @@ void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer
     catch (Exception ex) 
         throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
-	//TODO: move upper
-	wtr.write(item.header);
+    //TODO: move upper
+    wtr.write(item.header);
 
-	static if (is(T == Connect))
+    static if (is(T == Connect))
     {
         wtr.write(item.protocolName);
         wtr.write(item.protocolLevel);
@@ -182,10 +185,10 @@ unittest
 
     assert(wr.data.length == 30);
 
-    writer(data);
+    //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == cast(ubyte[])[
             0x10, //fixed header
-            0x1c, // rest is 30
+            0x1c, // rest is 28
             0x00, 0x04, //length of MQTT text
             0x4d, 0x51, 0x54, 0x54, // MQTT
             0x04, //protocol level
