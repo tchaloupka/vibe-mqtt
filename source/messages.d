@@ -32,6 +32,7 @@ module mqttd.messages;
 import std.range;
 import std.exception : enforce;
 import std.traits : isIntegral;
+debug import std.stdio;
 
 import mqttd.traits;
 
@@ -119,17 +120,68 @@ enum QoSLevel : ubyte
  */
 struct FixedHeader
 {
+//@safe @nogc pure nothrow:
+@safe pure :
+    private ubyte _payload;
+
     /// Represented as a 4-bit unsigned value
-    PacketType type;
+    @property PacketType type() const
+    {
+        return cast(PacketType)(_payload >> 4);
+    }
+
+    /// dtto
+    @property void type(in PacketType type)
+    {
+        _payload = cast(ubyte)((_payload & ~0xf0) | (type << 4));
+    }
 
     /// Duplicate delivery of a PUBLISH Control Packet
-    bool dup;
+    @property bool dup() const
+    {
+        return (_payload & 0x08) == 0x08;
+    }
+
+    /// dtto
+    @property void dup(in bool value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x08) | (value ? 0x08 : 0x00));
+    }
     
     /// Quality Of Service for a message
-    QoSLevel qos;
+    @property QoSLevel qos() const
+    {
+        return cast(QoSLevel)((_payload >> 1) & 0x03);
+    }
+
+    /// Dtto
+    @property void qos(in QoSLevel value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x06) | (value << 1));
+    }
     
     /// PUBLISH Retain flag 
-    bool retain;
+    @property bool retain() const
+    {
+        return (_payload & 0x01) == 0x01;
+    }
+
+    /// dtto
+    @property void retain(in bool value)
+    {
+        _payload = cast(ubyte)(_payload & ~0x01) | (value ? 0x01 : 0x00);
+    }
+
+    /// flags to ubyte
+    @property ubyte flags() const
+    {
+        return _payload;
+    }
+
+    @property void flags(in ubyte value)
+    {
+        _payload = value;
+    }
 
     /**
      * The Remaining Length is the number of bytes remaining within the current packet, 
@@ -137,21 +189,6 @@ struct FixedHeader
      * The Remaining Length does not include the bytes used to encode the Remaining Length.
      */
     uint length;
-
-    @safe @nogc
-    @property ubyte flags() const pure nothrow
-    {
-        return cast(ubyte)((type << 4) | (dup ? 0x08 : 0x00) | (retain ? 0x01 : 0x00) | (qos << 1));
-    }
-
-    @safe @nogc
-    @property void flags(ubyte value) pure nothrow
-    {
-        type = cast(PacketType)(value >> 4);
-        dup = (value & 0x08) == 0x08;
-        retain = (value & 0x01) == 0x01;
-        qos = cast(QoSLevel)((value >> 1) & 0x03);
-    }
 
     alias flags this;
 
@@ -166,14 +203,14 @@ struct FixedHeader
 
     this(T)(PacketType type, T flags, int length = 0) if(isIntegral!T)
     {
-        this.flags = cast(ubyte)flags;
+        this._payload = cast(ubyte)(type << 4 | flags);
         this.type = type;
         this.length = length;
     }
 
     this(T)(T value) if(isIntegral!T)
     {
-        this.flags = cast(ubyte)value;
+        this._payload = cast(ubyte)value;
     }
 }
 
@@ -320,37 +357,37 @@ struct ConnectFlags
     
     alias flags this;
 
-	unittest
-	{
-		import std.array;
+    unittest
+    {
+        import std.array;
 
-		ConnectFlags flags;
+        ConnectFlags flags;
 
-		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-		assert(flags == 0);
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == 0);
 
-		flags = 1; //reserved - no change
-		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
-		assert(flags == 0);
+        flags = 1; //reserved - no change
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == 0);
 
-		flags = 2;
-		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
+        flags = 2;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
 
-		flags = 4;
-		assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
+        flags = 4;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
 
-		flags = 24;
-		assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
+        flags = 24;
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
 
-		flags = 32;
-		assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
+        flags = 32;
+        assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
 
-		flags = 64;
-		assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
+        flags = 64;
+        assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
 
-		flags = 128;
-		assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
-	}
+        flags = 128;
+        assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
+    }
 }
 
 /// Gets required buffer size to encode into
