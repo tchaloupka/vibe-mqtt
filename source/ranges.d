@@ -71,52 +71,52 @@ struct Writer(R) if (canSerializeTo!(R))
         _output.put(val);
     }
 
-	static if(__traits(hasMember, R, "data"))
-	{
-		@property auto data()
-		{
-			return _output.data();
-		}
-	}
+    static if(__traits(hasMember, R, "data"))
+    {
+        @property auto data()
+        {
+            return _output.data();
+        }
+    }
 
-	void write(T)(T val) if (canWrite!T)
-	{
-		static if (is(T == ubyte))
-		{
-			put(val);
-		}
-		else static if (is(T == ushort))
-		{
-			put(cast(ubyte) (val >> 8));
-			put(cast(ubyte) val);
-		}
-		else static if (is(T == string))
-		{
-			import std.string : representation;
+    void write(T)(T val) if (canWrite!T)
+    {
+        static if (is(T == ubyte))
+        {
+            put(val);
+        }
+        else static if (is(T == ushort))
+        {
+            put(cast(ubyte) (val >> 8));
+            put(cast(ubyte) val);
+        }
+        else static if (is(T == string))
+        {
+            import std.string : representation;
 
-			enforce(val.length <= 0xFF, "String too long: ", val);
+            enforce(val.length <= 0xFF, "String too long: ", val);
 
-			write((cast(ushort)val.length));
-			foreach(b; val.representation) put(b);
-		}
-		else static if (is(T == FixedHeader))
-		{
-			put(val.flags);
+            write((cast(ushort)val.length));
+            foreach(b; val.representation) put(b);
+        }
+        else static if (is(T == FixedHeader))
+        {
+            put(val.flags);
 
-			int tmp = val.length;
-			do
-			{
-				byte digit = tmp % 128;
-				tmp /= 128;
-				if (tmp > 0) digit |= 0x80;
-				put(digit);
-			} while (tmp > 0);
-		}
-		else static if (is(T == ConnectFlags))
-		{
-			put(val.flags);
-		}
-	}
+            int tmp = val.length;
+            do
+            {
+                byte digit = tmp % 128;
+                tmp /= 128;
+                if (tmp > 0) digit |= 0x80;
+                put(digit);
+            } while (tmp > 0);
+        }
+        else static if (is(T == ConnectFlags))
+        {
+            put(val.flags);
+        }
+    }
 
 private:
     
