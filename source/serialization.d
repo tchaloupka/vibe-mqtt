@@ -235,3 +235,40 @@ unittest
             0xab, 0xcd  //packet id
         ]);
 }
+
+unittest
+{
+    auto pr = PubRec();
+    
+    auto buffer = appender!(ubyte[]);
+    auto wr = writer(buffer);
+    
+    wr.serialize(pr);
+    
+    assert(wr.data.length == 4);
+    
+    //debug writefln("%(%.02x %)", wr.data);
+    assert(wr.data == cast(ubyte[])[
+            0x50, //fixed header
+            0x02, //rest is 2
+            0x00, 0x00  //packet id
+        ]);
+    
+    auto data = reader(buffer.data);
+    
+    auto pr2 = deserialize!PubRec(data);
+    
+    assert(pr == pr2);
+    
+    pr2.packetId = 0xabcd;
+    buffer.clear();
+    
+    wr.serialize(pr2);
+    
+    assert(wr.data.length == 4);
+    assert(wr.data == cast(ubyte[])[
+            0x50, //fixed header
+            0x02, //rest is 2
+            0xab, 0xcd  //packet id
+        ]);
+}

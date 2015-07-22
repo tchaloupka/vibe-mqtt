@@ -671,9 +671,11 @@ struct PubAck
     ushort packetId;
 }
 
+/// A PUBREC Packet is the response to a PUBLISH Packet with QoS 2. It is the second packet of the QoS 2 protocol exchange.
 struct PubRec
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.PUBREC, 0, 2);
+    /// This contains the Packet Identifier from the PUBLISH Packet that is being acknowledged. 
     ushort packetId;
 }
 
