@@ -241,5 +241,6 @@ unittest
     testPubx!PubAck(0x40);
     testPubx!PubRec(0x50);
     testPubx!PubRel(0x62);
+    testPubx!PubComp(0x70);
 }
 
