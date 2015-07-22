@@ -180,7 +180,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
             import std.algorithm : map;
 
             auto length = read!ushort();
-            res = refRange(&this).takeExactly(length).map!(a => cast(immutable char)a).array;
+            res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
         }
 
         return res;
