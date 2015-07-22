@@ -244,3 +244,34 @@ unittest
     testPubx!PubComp(0x70);
 }
 
+unittest
+{
+    auto suback = SubAck();
+    suback.packetId = 0xabcd;
+    suback.returnCodes ~= SubscribeReturnCode.QoS0;
+    suback.returnCodes ~= SubscribeReturnCode.QoS1;
+    suback.returnCodes ~= SubscribeReturnCode.QoS2;
+    suback.returnCodes ~= SubscribeReturnCode.Failure;
+    
+    auto buffer = appender!(ubyte[]);
+    auto wr = writer(buffer);
+    
+    wr.serialize(suback);
+    
+    assert(wr.data.length == 8);
+    
+    debug writefln("%(%.02x %)", wr.data);
+
+    assert(wr.data == cast(ubyte[])[
+            0x90, //fixed header
+            0x06, //rest is 2
+            0xab, 0xcd,  //packet id
+            0x00, 0x01, 0x02, 0x80 //ret codes
+        ]);
+    
+    auto data = reader(buffer.data);
+    
+    auto suback2 = deserialize!SubAck(data);
+    
+    assert(suback == suback2);
+}

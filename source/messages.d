@@ -131,6 +131,19 @@ enum ConnectReturnCode : ubyte
     NotAuthorized      = 0x05
 }
 
+/// Subscribe Return code values
+enum SubscribeReturnCode : ubyte
+{
+    /// Success - Maximum QoS 0
+    QoS0 = 0x00,
+    /// Success - Maximum QoS 1
+    QoS1 = 0x01,
+    /// Success - Maximum QoS 2
+    QoS2 = 0x02,
+    /// Failure
+    Failure = 0x80
+}
+
 /**
  * Each MQTT Control Packet contains a fixed header.
  * 
@@ -514,6 +527,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T:ubyte)) return 1;
     else static if (is(T:ushort)) return 2;
     else static if (is(T:string)) return cast(uint)(2 + item.length);
+    else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
 
@@ -656,6 +670,7 @@ struct ConnAck
     ConnectReturnCode returnCode;
 }
 
+//TODO: PUBLISH
 struct Publish
 {
     FixedHeader header;
@@ -697,16 +712,30 @@ struct PubComp
     ushort packetId;
 }
 
+//TODO: SUBSCRIBE
 struct Subscribe
 {
     FixedHeader header;
     ushort packetId;
 }
 
+/**
+ * A SUBACK Packet is sent by the Server to the Client to confirm receipt and processing of a SUBSCRIBE Packet.
+ * A SUBACK Packet contains a list of return codes, that specify the maximum QoS level that was granted in each 
+ * Subscription that was requested by the SUBSCRIBE.
+ */
 struct SubAck
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.SUBACK, 0);
+
+    /// This contains the Packet Identifier from the SUBSCRIBE Packet that is being acknowledged.
     ushort packetId;
+    /**
+     * The payload contains a list of return codes. Each return code corresponds to a Topic Filter in the 
+     * SUBSCRIBE Packet being acknowledged. 
+     * The order of return codes in the SUBACK Packet MUST match the order of Topic Filters in the SUBSCRIBE Packet.
+     */
+    SubscribeReturnCode[] returnCodes;
 }
 
 struct Unsubscribe

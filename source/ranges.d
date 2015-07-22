@@ -112,6 +112,13 @@ struct Writer(R) if (canSerializeTo!(R))
             write((cast(ushort)val.length));
             foreach(b; val.representation) put(b);
         }
+        else static if (is(T == SubscribeReturnCode[]))
+        {
+            foreach(ret; val)
+            {
+                write(ret);
+            }
+        }
     }
 
 private:
@@ -181,6 +188,10 @@ struct Reader(R) if (canDeserializeFrom!(R))
 
             auto length = read!ushort();
             res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
+        }
+        else static if (is(T == SubscribeReturnCode[]))
+        {
+            //foreach(ret; 
         }
 
         return res;
