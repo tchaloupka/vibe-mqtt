@@ -662,9 +662,12 @@ struct Publish
     ushort packetId; // if QoS > 0
 }
 
+/// A PUBACK Packet is the response to a PUBLISH Packet with QoS level 1.
 struct PubAck
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.PUBACK, 0, 2);
+
+    /// This contains the Packet Identifier from the PUBLISH Packet that is being acknowledged. 
     ushort packetId;
 }
 

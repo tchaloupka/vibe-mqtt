@@ -198,3 +198,40 @@ unittest
             0x05  //return code
         ]);
 }
+
+unittest
+{
+    auto pa = PubAck();
+    
+    auto buffer = appender!(ubyte[]);
+    auto wr = writer(buffer);
+    
+    wr.serialize(pa);
+    
+    assert(wr.data.length == 4);
+    
+    //debug writefln("%(%.02x %)", wr.data);
+    assert(wr.data == cast(ubyte[])[
+            0x40, //fixed header
+            0x02, //rest is 2
+            0x00, 0x00  //packet id
+        ]);
+    
+    auto data = reader(buffer.data);
+    
+    auto pa2 = deserialize!PubAck(data);
+    
+    assert(pa == pa2);
+    
+    pa2.packetId = 0xabcd;
+    buffer.clear();
+    
+    wr.serialize(pa2);
+    
+    assert(wr.data.length == 4);
+    assert(wr.data == cast(ubyte[])[
+            0x40, //fixed header
+            0x02, //rest is 2
+            0xab, 0xcd  //packet id
+        ]);
+}
