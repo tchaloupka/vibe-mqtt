@@ -95,7 +95,7 @@ void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer
     item.header.length = getRemainingLength();
 
     //check if is valid
-    try item.checkPacket();
+    try item.validate();
     catch (Exception ex) 
         throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
@@ -160,8 +160,7 @@ T deserialize(T, R)(ref R rdr) if (isMqttPacket!T && is(R == Reader!In, In))
     }
 
     // validate initialized packet
-    try 
-        res.checkPacket();
+    try res.validate();
     catch (Exception ex) 
         throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
@@ -185,7 +184,7 @@ unittest
 
     assert(wr.data.length == 30);
 
-    //debug writefln("%(%.02x %)", wr.data);
+    debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == cast(ubyte[])[
             0x10, //fixed header
             0x1c, // rest is 28

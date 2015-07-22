@@ -36,6 +36,7 @@ debug import std.stdio;
 
 import mqttd.traits;
 
+/// Condition to indicate if member is used in packet
 struct Condition(alias C)
 {
     static alias C cond;
@@ -112,7 +113,6 @@ enum QoSLevel : ubyte
     Reserved = 0x3
 }
 
-//TODO: Change to properties so no unneeded data stored
 /**
  * Each MQTT Control Packet contains a fixed header.
  * 
@@ -120,8 +120,7 @@ enum QoSLevel : ubyte
  */
 struct FixedHeader
 {
-//@safe @nogc pure nothrow:
-@safe pure :
+@safe pure @nogc nothrow:
     private ubyte _payload;
 
     /// Represented as a 4-bit unsigned value
@@ -130,7 +129,7 @@ struct FixedHeader
         return cast(PacketType)(_payload >> 4);
     }
 
-    /// dtto
+    /// ditto
     @property void type(in PacketType type)
     {
         _payload = cast(ubyte)((_payload & ~0xf0) | (type << 4));
@@ -142,7 +141,7 @@ struct FixedHeader
         return (_payload & 0x08) == 0x08;
     }
 
-    /// dtto
+    /// ditto
     @property void dup(in bool value)
     {
         _payload = cast(ubyte)((_payload & ~0x08) | (value ? 0x08 : 0x00));
@@ -154,7 +153,7 @@ struct FixedHeader
         return cast(QoSLevel)((_payload >> 1) & 0x03);
     }
 
-    /// Dtto
+    /// ditto
     @property void qos(in QoSLevel value)
     {
         _payload = cast(ubyte)((_payload & ~0x06) | (value << 1));
@@ -166,7 +165,7 @@ struct FixedHeader
         return (_payload & 0x01) == 0x01;
     }
 
-    /// dtto
+    /// ditto
     @property void retain(in bool value)
     {
         _payload = cast(ubyte)(_payload & ~0x01) | (value ? 0x01 : 0x00);
@@ -203,14 +202,14 @@ struct FixedHeader
 
     this(T)(PacketType type, T flags, int length = 0) if(isIntegral!T)
     {
-        this._payload = cast(ubyte)(type << 4 | flags);
+        this.flags = cast(ubyte)(type << 4 | flags);
         this.type = type;
         this.length = length;
     }
 
     this(T)(T value) if(isIntegral!T)
     {
-        this._payload = cast(ubyte)value;
+        this.flags = cast(ubyte)value;
     }
 }
 
@@ -220,18 +219,39 @@ struct FixedHeader
  */
 struct ConnectFlags
 {
+@safe pure @nogc nothrow:
+    private ubyte _payload;
+    
     /**
      * If the User Name Flag is set to 0, a user name MUST NOT be present in the payload.
      * If the User Name Flag is set to 1, a user name MUST be present in the payload.
      */
-    bool userName;
+    @property bool userName() const
+    {
+        return (_payload & 0x80) == 0x80;
+    }
+
+    /// ditto
+    @property void userName(in bool value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x80) | (value ? 0x80 : 0x00));
+    }
 
     /**
      * If the Password Flag is set to 0, a password MUST NOT be present in the payload.
      * If the Password Flag is set to 1, a password MUST be present in the payload.
      * If the User Name Flag is set to 0, the Password Flag MUST be set to 0.
      */
-    bool password;
+    @property bool password() const
+    {
+        return (_payload & 0x40) == 0x40;
+    }
+
+    /// ditto
+    @property void password(in bool value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x40) | (value ? 0x40 : 0x00));
+    }
 
     /**
      * This bit specifies if the Will Message is to be Retained when it is published.
@@ -241,7 +261,16 @@ struct ConnectFlags
      *      If Will Retain is set to 0, the Server MUST publish the Will Message as a non-retained message.
      *      If Will Retain is set to 1, the Server MUST publish the Will Message as a retained message
      */
-    bool willRetain;
+    @property bool willRetain() const
+    {
+        return (_payload & 0x20) == 0x20;
+    }
+
+    /// ditto
+    @property void willRetain(in bool value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x20) | (value ? 0x20 : 0x00));
+    }
 
     /**
      * Specify the QoS level to be used when publishing the Will Message.
@@ -250,7 +279,16 @@ struct ConnectFlags
      * If the Will Flag is set to 1, the value of Will QoS can be 0 (0x00), 1 (0x01), or 2 (0x02).
      * It MUST NOT be 3 (0x03)
      */
-    QoSLevel willQoS;
+    @property QoSLevel willQoS() const
+    {
+        return cast(QoSLevel)((_payload >> 3) & 0x03);
+    }
+
+    /// ditto
+    @property void willQoS(in QoSLevel value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x18) | (value << 3));
+    }
 
     /**
      * If the Will Flag is set to 1 this indicates that, if the Connect request is accepted, a Will Message MUST 
@@ -275,7 +313,16 @@ struct ConnectFlags
      * 
      * If the Will Flag is set to 0, a Will Message MUST NOT be published when this Network Connection ends
      */
-    bool will;
+    @property bool will() const
+    {
+        return (_payload & 0x04) == 0x04;
+    }
+
+    /// ditto
+    @property void will(in bool value)
+    {
+        _payload = cast(ubyte)((_payload & ~0x04) | (value ? 0x04 : 0x00));
+    }
 
     /**
      * This bit specifies the handling of the Session state. 
@@ -314,30 +361,25 @@ struct ConnectFlags
      * to the Server at some later point in time. When a Client has determined that it has no further use for 
      * the session it should do a final connect with CleanSession set to 1 and then disconnect.
      */
-    bool cleanSession;
-
-    @safe @nogc
-    @property ubyte flags() const pure nothrow
+    @property bool cleanSession() const
     {
-        return cast(ubyte)(
-            (userName ? 0x80 : 0x00) | 
-            (password ? 0x40 : 0x00) | 
-            (willRetain ? 0x20 : 0x00) |
-            (willQoS << 3) |
-            (will ? 0x04 : 0x00) |
-            (cleanSession ? 0x02 : 0x00)
-            );
+        return (_payload & 0x02) == 0x02;
     }
 
-    @safe @nogc
-    @property void flags(ubyte value) pure nothrow
+    /// ditto
+    @property void cleanSession(in bool value)
     {
-        userName = (value & 0x80) == 0x80;
-        password = (value & 0x40) == 0x40;
-        willRetain = (value & 0x20) == 0x20;
-        willQoS = cast(QoSLevel)((value >> 3) & 0x03);
-        will = (value & 0x04) == 0x04;
-        cleanSession = (value & 0x02) == 0x02;
+        _payload = cast(ubyte)((_payload & ~0x02) | (value ? 0x02 : 0x00));
+    }
+
+    @property ubyte flags() const
+    {
+        return _payload;
+    }
+
+    @property void flags(ubyte value) pure
+    {
+        _payload = value & ~0x01;
     }
     
     this(bool userName, bool password, bool willRetain, QoSLevel willQoS, bool will, bool cleanSession)
@@ -352,7 +394,7 @@ struct ConnectFlags
     
     this(T)(T value) if(isIntegral!T)
     {
-        this.flags = cast(ubyte)value;
+        this.flags = cast(ubyte)(value & ~0x01);
     }
     
     alias flags this;
@@ -403,7 +445,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
 }
 
 @safe
-void checkPacket(T)(auto ref in T packet) pure
+void validate(T)(auto ref in T packet) pure
 {
     import std.string : format;
 
@@ -435,7 +477,7 @@ void checkPacket(T)(auto ref in T packet) pure
             format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
         enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
-        packet.connectFlags.checkPacket();
+        packet.connectFlags.validate();
         enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
         enforce(packet.connectFlags.userName || !packet.connectFlags.password > 0, "Username not set, but password is");
     }
@@ -502,24 +544,19 @@ struct Connect
     string clientIdentifier;
 
     /// Will Topic
-    @Condition!(a=>a.connectFlags.will)()
+    @Condition!(a => a.connectFlags.will)()
     string willTopic;
 
     /// Will Message
-    @Condition!(a=>a.connectFlags.will)()
+    @Condition!(a => a.connectFlags.will)()
     string willMessage;
 
     /// User Name
-    @Condition!(a=>a.connectFlags.userName)()
+    @Condition!(a => a.connectFlags.userName)()
     string userName;
 
     /// Password
-    //@Condition!(a=>a.connectFlags.password)()
-    @Condition!((a) 
-        {
-            writeln("check = ", a.connectFlags.password);
-            return a.connectFlags.password;
-        })()
+    @Condition!(a => a.connectFlags.password)()
     string password;
 
     static Connect opCall()
