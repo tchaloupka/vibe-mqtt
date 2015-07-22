@@ -209,7 +209,7 @@ struct FixedHeader
 
     alias flags this;
 
-    this(PacketType type, bool dup, QoSLevel qos, bool retain, int length = 0)
+    this(PacketType type, bool dup, QoSLevel qos, bool retain, uint length = 0)
     {
         this.type = type;
         this.dup = dup;
@@ -218,7 +218,7 @@ struct FixedHeader
         this.length = length;
     }
 
-    this(T)(PacketType type, T flags, int length = 0) if(isIntegral!T)
+    this(T)(PacketType type, T flags, uint length = 0) if(isIntegral!T)
     {
         this.flags = cast(ubyte)(type << 4 | flags);
         this.type = type;

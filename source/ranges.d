@@ -154,7 +154,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
             res.flags = read!ubyte();
             res.length = 0;
             
-            int multiplier = 1;
+            uint multiplier = 1;
             ubyte digit;
             do
             {

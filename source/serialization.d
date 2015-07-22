@@ -176,9 +176,25 @@ unittest
     auto conack2 = deserialize!ConnAck(data);
 
     // TODO: this for some reason fails..
-    //assert(conack == conack2);
+//    writefln("%(%.02x %)", *(cast(byte[ConnAck.sizeof]*)(&conack)));
+//    writefln("%(%.02x %)", *(cast(byte[ConnAck.sizeof]*)(&conack2)));
+//    assert(conack == conack2);
     assert(conack.header == conack2.header);
     assert(conack.flags == conack2.flags);
     assert(conack.returnCode == conack2.returnCode);
     assert(conack.returnCode == ConnectReturnCode.ConnectionAccepted);
+
+    conack2.flags = 0x01;
+    conack2.returnCode = ConnectReturnCode.NotAuthorized;
+    buffer.clear();
+
+    wr.serialize(conack2);
+
+    assert(wr.data.length == 4);
+    assert(wr.data == cast(ubyte[])[
+            0x20, //fixed header
+            0x02, //rest is 2
+            0x01, //flags
+            0x05  //return code
+        ]);
 }
