@@ -30,6 +30,7 @@
 module mqttd.traits;
 
 import std.range;
+import std.traits : isDynamicArray;
 
 import mqttd.messages;
 
@@ -41,10 +42,11 @@ enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
         || is(T == PingReq) || is(T == PingResp)
         || is(T == Disconnect);
 
+enum bool canReadBase(T) = is(T:ubyte) || is(T:ushort) || is(T:string) 
+    || is(T == FixedHeader) || is(T == ConnectFlags) || is(T == ConnAckFlags);
+
 /// Can T be read by Reader?
-enum bool canRead(T) = is(T:ubyte) || is(T:ushort) || is(T:string) 
-    || is(T == FixedHeader) || is(T == ConnectFlags) || is(T == ConnAckFlags) 
-    || is(T == SubscribeReturnCode[]);
+enum bool canRead(T) = canReadBase!T || (isDynamicArray!T && canReadBase!(ElementType!T));
 
 /// Can T be written by Writer?
 enum bool canWrite(T) = canRead!T;

@@ -260,8 +260,7 @@ unittest
     
     assert(wr.data.length == 8);
     
-    debug writefln("%(%.02x %)", wr.data);
-
+    //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == cast(ubyte[])[
             0x90, //fixed header
             0x06, //rest is 2
@@ -272,6 +271,5 @@ unittest
     auto data = reader(buffer.data);
     
     auto suback2 = deserialize!SubAck(data);
-    
     assert(suback == suback2);
 }

@@ -130,6 +130,10 @@ private:
 
 struct Reader(R) if (canDeserializeFrom!(R))
 {
+    import std.traits : isDynamicArray;
+
+    private uint _remainingLen;
+
     this(R input)
     {
         _input = input;
@@ -150,6 +154,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
     void popFront()
     {
         _input.popFront();
+        if(_remainingLen > 0) _remainingLen--; //decrease remaining length set from fixed header
         //debug writefln("Pop: %s", empty? "empty" : format("%.02x", front));
     }
 
@@ -170,6 +175,9 @@ struct Reader(R) if (canDeserializeFrom!(R))
                 multiplier *= 128;
                 if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
             } while ((digit & 128) != 0);
+
+            //set remaining length for calculations
+            _remainingLen = res.length;
         }
         else static if (is(T:ubyte))
         {
@@ -189,9 +197,13 @@ struct Reader(R) if (canDeserializeFrom!(R))
             auto length = read!ushort();
             res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
         }
-        else static if (is(T == SubscribeReturnCode[]))
+        else static if (isDynamicArray!T)
         {
-            //foreach(ret; 
+            res = T.init;
+            while(_remainingLen > 0) // read to end
+            {
+                res ~= read!(ElementType!T)();
+            }
         }
 
         return res;
