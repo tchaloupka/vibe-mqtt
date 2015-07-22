@@ -45,7 +45,7 @@ struct Condition(alias C)
 /**
 * Exception thrown when package format is somehow malformed
 */
-class PacketFormatException : Exception
+final class PacketFormatException : Exception
 {
     this(string msg = null, Throwable next = null)
     {

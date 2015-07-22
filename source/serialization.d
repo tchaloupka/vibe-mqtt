@@ -39,89 +39,61 @@ import mqttd.ranges;
 
 debug import std.stdio;
 
+/**
+* Walk over all members of Mqtt packet, checks if member should be handled and calls defined callback for it
+*/
+void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacket!T)
+{
+    import std.typetuple;
+
+    foreach(member; __traits(allMembers, T))
+    {
+        enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
+
+        static if(isMemberVariable)
+        {
+            auto include = true;
+            foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
+            {
+                enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
+                static if(isCondition!(typeof(attr)))
+                {
+                    //check condition
+                    auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
+                    if(!attribute.cond(item))
+                    {
+                        include = false;
+                        continue;
+                    }
+                }
+            }
+
+            if(include)
+            {
+                //debug writeln("processing ", member);
+                memberCallback(__traits(getMember, item, member));
+            }
+        }
+    }
+}
+
 /// Serialize given Mqtt packet
 void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer!Out, Out))
 {
     static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
-    /// Computes and sets remaining length to the package header field
-    auto getRemainingLength()
-    {
-        uint len;
-        //static if (is(T == Connect))
-        //{
-        //    len = item.protocolName.itemLength + item.protocolLevel.itemLength + item.connectFlags.itemLength + 
-        //        item.keepAlive.itemLength + item.clientIdentifier.itemLength;
-        //
-        //    if (item.connectFlags.will) len += item.willTopic.itemLength + item.willMessage.itemLength;
-        //    if (item.connectFlags.userName)
-        //    {
-        //        len += item.userName.itemLength;
-        //        if (item.connectFlags.password) len += item.password.itemLength;
-        //    }
-        //}
-
-        import std.typetuple;
-
-        writeln("pwd - ", item.connectFlags.password);
-
-        foreach(member; __traits(allMembers, T))
-        {
-            enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
-
-            static if(isMemberVariable)
-            {
-                foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
-                {
-                    enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
-                    static if(isCondition!(typeof(attr)))
-                    {
-                        //check condition
-                        //writeln(member, " has Condition - ", idx);
-                        auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
-                        if(!attribute.cond(item)) continue;
-                    }
-                }
-
-                writeln("add ", member, " - ", itemLength(__traits(getMember, item, member)));
-                len += itemLength(__traits(getMember, item, member));
-            }
-        }
-
-        return len;
-    }
-
-    //set remaining packet length
-    item.header.length = getRemainingLength();
+    //set remaining packet length by checking packet conditions
+    int len;
+    item.processMembers!(a => len += a.itemLength);
+    item.header.length = len;
 
     //check if is valid
     try item.validate();
     catch (Exception ex) 
         throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
-    //TODO: move upper
-    wtr.write(item.header);
-
-    static if (is(T == Connect))
-    {
-        wtr.write(item.protocolName);
-        wtr.write(item.protocolLevel);
-        wtr.write(item.connectFlags);
-        wtr.write(item.keepAlive);
-        wtr.write(item.clientIdentifier);
-
-        if (item.connectFlags.will)
-        {
-            wtr.write(item.willTopic);
-            wtr.write(item.willMessage);
-        }
-        if (item.connectFlags.userName)
-        {
-            wtr.write(item.userName);
-            if (item.connectFlags.password) wtr.write(item.password);
-        }
-    }
-    else assert(0, "Not implemented toBytes for " ~ T.stringof);
+    //write members to output writer
+    item.processMembers!((ref a) => wtr.write(a));
 }
 
 T deserialize(T, R)(ref R rdr) if (isMqttPacket!T && is(R == Reader!In, In))
@@ -132,32 +104,7 @@ T deserialize(T, R)(ref R rdr) if (isMqttPacket!T && is(R == Reader!In, In))
 
     T res;
 
-    // read header if presented
-    res.header = rdr.read!FixedHeader();
-
-    //TODO: Implement by member deserialization
-
-    static if (is(T == Connect))
-    {
-        res.protocolName = rdr.read!string();
-        res.protocolLevel = rdr.read!ubyte();
-        res.connectFlags = rdr.read!ConnectFlags();
-        res.keepAlive = rdr.read!ushort();
-        res.clientIdentifier = rdr.read!string();
-
-        if (res.connectFlags.will)
-        {
-            res.willTopic = rdr.read!string();
-            res.willMessage = rdr.read!string();
-        }
-        if (res.connectFlags.userName)
-        {
-            res.userName = rdr.read!string();
-            if (res.connectFlags.password) res.password = rdr.read!string();
-        }
-
-        enforce(rdr.empty, new PacketFormatException("There is more data available than specified in header"));
-    }
+    res.processMembers!((ref a) => a = rdr.read!(typeof(a)));
 
     // validate initialized packet
     try res.validate();
@@ -184,7 +131,7 @@ unittest
 
     assert(wr.data.length == 30);
 
-    debug writefln("%(%.02x %)", wr.data);
+    //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == cast(ubyte[])[
             0x10, //fixed header
             0x1c, // rest is 28
