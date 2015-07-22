@@ -32,6 +32,7 @@ module mqttd.messages;
 import std.range;
 import std.exception : enforce;
 import std.traits : isIntegral;
+import std.typecons : Nullable;
 debug import std.stdio;
 
 import mqttd.traits;
@@ -111,6 +112,23 @@ enum QoSLevel : ubyte
     ExactlyOnce = 0x2,
     /// Reserved – must not be used
     Reserved = 0x3
+}
+
+/// Connect Return code values - 0 = accepted, the rest means refused (6-255 are reserved)
+enum ConnectReturnCode : ubyte
+{
+    /// Connection accepted
+    ConnectionAccepted = 0x00,
+    /// The Server does not support the level of the MQTT protocol requested by the Client
+    ProtocolVersion    = 0x01,
+    /// The Client identifier is correct UTF-8 but not allowed by the Server
+    Identifier         = 0x02,
+    /// The Network Connection has been made but the MQTT service is unavailable
+    ServerUnavailable  = 0x03,
+    /// The data in the user name or password is malformed
+    UserNameOrPassword = 0x04,
+    /// The Client is not authorized to connect
+    NotAuthorized      = 0x05
 }
 
 /**
@@ -432,15 +450,70 @@ struct ConnectFlags
     }
 }
 
+/// Connect Acknowledge Flags
+struct ConnAckFlags
+{
+@safe pure @nogc nothrow:
+    private ubyte _payload;
+
+    /**
+     * If the Server accepts a connection with CleanSession set to 1, the Server MUST set Session Present to 0 
+     * in the CONNACK packet in addition to setting a zero return code in the CONNACK packet.
+     *
+     * If the Server accepts a connection with CleanSession set to 0, the value set in Session Present depends on 
+     * whether the Server already has stored Session state for the supplied client ID. If the Server has stored 
+     * Session state, it MUST set Session Present to 1 in the CONNACK packet. 
+     * If the Server does not have stored Session state, it MUST set Session Present to 0 in the CONNACK packet.
+     * This is in addition to setting a zero return code in the CONNACK packet.
+     *
+     * The Session Present flag enables a Client to establish whether the Client and Server have a consistent view 
+     * about whether there is already stored Session state.
+     *
+     * Once the initial setup of a Session is complete, a Client with stored Session state will expect the Server 
+     * to maintain its stored Session state. In the event that the value of Session Present received by the Client 
+     * from the Server is not as expected, the Client can choose whether to proceed with the Session or to disconnect.
+     * The Client can discard the Session state on both Client and Server by disconnecting, connecting with 
+     * Clean Session set to 1 and then disconnecting again. 
+     *
+     * If a server sends a CONNACK packet containing a non-zero return code it MUST set Session Present to 0
+     */
+    @property bool sessionPresent() const
+    {
+        return (_payload & 0x01) == 0x01;
+    }
+
+    /// ditto
+    @property void sessionPresent(in bool value)
+    {
+        _payload = cast(ubyte)(value ? 0x01 : 0x00);
+    }
+
+    @property ubyte flags() const
+    {
+        return _payload;
+    }
+
+    @property void flags(ubyte value) pure
+    {
+        _payload = cast(ubyte)(value & 0x01); //clean reserved bits
+    }
+
+    alias flags this;
+
+    this(T)(T value) if(isIntegral!T)
+    {
+        this.flags = cast(ubyte)value;
+    }
+}
+
 /// Gets required buffer size to encode into
 @safe @nogc
 uint itemLength(T)(auto ref in T item) pure nothrow
 {
-    static if (is(T == ubyte)) return 1;
-    else static if (is(T == ushort)) return 2;
-    else static if (is(T == string)) return cast(uint)(2 + item.length);
-    else static if (is(T == ConnectFlags)) return 1;
-    else static if (is(T == FixedHeader)) return 0;
+    static if (is(T == FixedHeader)) return 0;
+    else static if (is(T:ubyte)) return 1;
+    else static if (is(T:ushort)) return 2;
+    else static if (is(T:string)) return cast(uint)(2 + item.length);
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
 
@@ -451,9 +524,17 @@ void validate(T)(auto ref in T packet) pure
 
     static if (__traits(hasMember, T, "header"))
     {
-        void checkHeader(ubyte value, ubyte mask = 0xFF)
+        void checkHeader(ubyte value, ubyte mask = 0xFF, Nullable!uint length = Nullable!uint())
         {
-            enforce(packet.header == (value & mask), "Wrong header");
+            enforce((mask & 0xF0) == 0x00 
+                || (packet.header & 0xF0 & mask) == (value & 0xF0), 
+                "Wrong packet type");
+
+            enforce((mask & 0x0F) == 0x00 
+                || (packet.header & 0x0F & mask) == (value & 0x0F), 
+                "Wrong fixed header flags");
+
+            enforce(length.isNull || packet.header.length == length.get, "Wrong fixed header length");
         }
     }
 
@@ -477,9 +558,15 @@ void validate(T)(auto ref in T packet) pure
             format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
         enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
             format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
-        packet.connectFlags.validate();
-        enforce(!packet.connectFlags.userName || packet.userName.length > 0, "Username not set");
-        enforce(packet.connectFlags.userName || !packet.connectFlags.password > 0, "Username not set, but password is");
+        packet.flags.validate();
+        enforce(!packet.flags.userName || packet.userName.length > 0, "Username not set");
+        enforce(packet.flags.userName || !packet.flags.password > 0, "Username not set, but password is");
+    }
+    else static if (is(T == ConnAck))
+    {
+        checkHeader(0x20, 0xFF, Nullable!uint(0x02));
+        enforce(packet.flags <= 1, "Invalid Connect Acknowledge Flags");
+        enforce(packet.returnCode <= 5, "Invalid return code");
     }
 }
 
@@ -496,22 +583,22 @@ void validate(T)(auto ref in T packet) pure
  */
 struct Connect
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(0x10);
 
     /// The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”
-    string protocolName;
+    string protocolName = MQTT_PROTOCOL_NAME;
 
     /**
      * The 8 bit unsigned value that represents the revision level of the protocol used by the Client.
      * The value of the Protocol Level field for the version 3.1.1 of the protocol is 4 (0x04).
      */
-    ubyte protocolLevel = 4;
+    ubyte protocolLevel = MQTT_PROTOCOL_LEVEL_3_1_1;
 
     /**
      * The Connect Flags byte contains a number of parameters specifying the behavior of the MQTT connection.
      * It also indicates the presence or absence of fields in the payload.
      */
-    ConnectFlags connectFlags;
+    ConnectFlags flags;
 
     /**
      * The Keep Alive is a time interval measured in seconds. Expressed as a 16-bit word, it is the maximum time 
@@ -544,35 +631,29 @@ struct Connect
     string clientIdentifier;
 
     /// Will Topic
-    @Condition!(a => a.connectFlags.will)()
+    @Condition!(a => a.flags.will)()
     string willTopic;
 
     /// Will Message
-    @Condition!(a => a.connectFlags.will)()
+    @Condition!(a => a.flags.will)()
     string willMessage;
 
     /// User Name
-    @Condition!(a => a.connectFlags.userName)()
+    @Condition!(a => a.flags.userName)()
     string userName;
 
     /// Password
-    @Condition!(a => a.connectFlags.password)()
+    @Condition!(a => a.flags.password)()
     string password;
-
-    static Connect opCall()
-    {
-        Connect res;
-        res.header = 0x10;
-        res.protocolName = MQTT_PROTOCOL_NAME;
-        res.protocolLevel = MQTT_PROTOCOL_LEVEL_3_1_1;
-
-        return res;
-    }
 }
 
 struct ConnAck
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.CONNACK, 0, 2);
+
+    ConnAckFlags flags;
+
+    ConnectReturnCode returnCode;
 }
 
 struct Publish

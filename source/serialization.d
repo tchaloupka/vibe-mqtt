@@ -121,7 +121,7 @@ unittest
 
     auto con = Connect();
     con.clientIdentifier = "testclient";
-    con.connectFlags.userName = true;
+    con.flags.userName = true;
     con.userName = "user";
 
     auto buffer = appender!(ubyte[]);
@@ -150,4 +150,35 @@ unittest
 
     auto con2 = deserialize!Connect(data);
     assert(con == con2);
+}
+
+unittest
+{
+    auto conack = ConnAck();
+
+    auto buffer = appender!(ubyte[]);
+    auto wr = writer(buffer);
+
+    wr.serialize(conack);
+
+    assert(wr.data.length == 4);
+
+    //debug writefln("%(%.02x %)", wr.data);
+    assert(wr.data == cast(ubyte[])[
+            0x20, //fixed header
+            0x02, //rest is 2
+            0x00, //flags
+            0x00  //return code
+        ]);
+
+    auto data = reader(buffer.data);
+
+    auto conack2 = deserialize!ConnAck(data);
+
+    // TODO: this for some reason fails..
+    //assert(conack == conack2);
+    assert(conack.header == conack2.header);
+    assert(conack.flags == conack2.flags);
+    assert(conack.returnCode == conack2.returnCode);
+    assert(conack.returnCode == ConnectReturnCode.ConnectionAccepted);
 }

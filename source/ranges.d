@@ -81,25 +81,7 @@ struct Writer(R) if (canSerializeTo!(R))
 
     void write(T)(T val) if (canWrite!T)
     {
-        static if (is(T == ubyte))
-        {
-            put(val);
-        }
-        else static if (is(T == ushort))
-        {
-            put(cast(ubyte) (val >> 8));
-            put(cast(ubyte) val);
-        }
-        else static if (is(T == string))
-        {
-            import std.string : representation;
-
-            enforce(val.length <= 0xFF, "String too long: ", val);
-
-            write((cast(ushort)val.length));
-            foreach(b; val.representation) put(b);
-        }
-        else static if (is(T == FixedHeader))
+        static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
         {
             put(val.flags);
 
@@ -112,9 +94,23 @@ struct Writer(R) if (canSerializeTo!(R))
                 put(digit);
             } while (tmp > 0);
         }
-        else static if (is(T == ConnectFlags))
+        else static if (is(T:ubyte))
         {
-            put(val.flags);
+            put(val);
+        }
+        else static if (is(T:ushort))
+        {
+            put(cast(ubyte) (val >> 8));
+            put(cast(ubyte) val);
+        }
+        else static if (is(T:string))
+        {
+            import std.string : representation;
+
+            enforce(val.length <= 0xFF, "String too long: ", val);
+
+            write((cast(ushort)val.length));
+            foreach(b; val.representation) put(b);
         }
     }
 
@@ -153,29 +149,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
     T read(T)() if (canRead!T)
     {
         T res = void;
-        static if (is(T == ubyte))
-        {
-            res = front;
-            popFront();
-        }
-        else static if (is(T == ushort))
-        {
-            res = cast(ushort) (read!ubyte() << 8);
-            res |= cast(ushort) read!ubyte();
-        }
-        else static if (is(T == string))
-        {
-            import std.array;
-            import std.algorithm : map;
-
-            auto length = read!ushort();
-            res = refRange(&this).takeExactly(length).map!(a => cast(immutable char)a).array;
-        }
-        else static if (is(T == ConnectFlags))
-        {
-            res.flags = read!ubyte();
-        }
-        else static if (is(T == FixedHeader))
+        static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
         {
             res.flags = read!ubyte();
             res.length = 0;
@@ -189,6 +163,24 @@ struct Reader(R) if (canDeserializeFrom!(R))
                 multiplier *= 128;
                 if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
             } while ((digit & 128) != 0);
+        }
+        else static if (is(T:ubyte))
+        {
+            res = cast(T)front;
+            popFront();
+        }
+        else static if (is(T:ushort))
+        {
+            res = cast(ushort) (read!ubyte() << 8);
+            res |= cast(ushort) read!ubyte();
+        }
+        else static if (is(T:string))
+        {
+            import std.array;
+            import std.algorithm : map;
+
+            auto length = read!ushort();
+            res = refRange(&this).takeExactly(length).map!(a => cast(immutable char)a).array;
         }
 
         return res;
