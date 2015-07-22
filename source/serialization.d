@@ -201,74 +201,45 @@ unittest
 
 unittest
 {
-    auto pa = PubAck();
-    
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
-    
-    wr.serialize(pa);
-    
-    assert(wr.data.length == 4);
-    
-    //debug writefln("%(%.02x %)", wr.data);
-    assert(wr.data == cast(ubyte[])[
-            0x40, //fixed header
-            0x02, //rest is 2
-            0x00, 0x00  //packet id
-        ]);
-    
-    auto data = reader(buffer.data);
-    
-    auto pa2 = deserialize!PubAck(data);
-    
-    assert(pa == pa2);
-    
-    pa2.packetId = 0xabcd;
-    buffer.clear();
-    
-    wr.serialize(pa2);
-    
-    assert(wr.data.length == 4);
-    assert(wr.data == cast(ubyte[])[
-            0x40, //fixed header
-            0x02, //rest is 2
-            0xab, 0xcd  //packet id
-        ]);
+    void testPubx(T)(ubyte header)
+    {
+        auto px = T();
+        
+        auto buffer = appender!(ubyte[]);
+        auto wr = writer(buffer);
+        
+        wr.serialize(px);
+        
+        assert(wr.data.length == 4);
+        
+        //debug writefln("%(%.02x %)", wr.data);
+        assert(wr.data == cast(ubyte[])[
+                header, //fixed header
+                0x02, //rest is 2
+                0x00, 0x00  //packet id
+            ]);
+        
+        auto data = reader(buffer.data);
+        
+        auto px2 = deserialize!T(data);
+        
+        assert(px == px2);
+        
+        px2.packetId = 0xabcd;
+        buffer.clear();
+        
+        wr.serialize(px2);
+        
+        assert(wr.data.length == 4);
+        assert(wr.data == cast(ubyte[])[
+                header, //fixed header
+                0x02, //rest is 2
+                0xab, 0xcd  //packet id
+            ]);
+    }
+
+    testPubx!PubAck(0x40);
+    testPubx!PubRec(0x50);
+    testPubx!PubRel(0x62);
 }
 
-unittest
-{
-    auto pr = PubRec();
-    
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
-    
-    wr.serialize(pr);
-    
-    assert(wr.data.length == 4);
-    
-    //debug writefln("%(%.02x %)", wr.data);
-    assert(wr.data == cast(ubyte[])[
-            0x50, //fixed header
-            0x02, //rest is 2
-            0x00, 0x00  //packet id
-        ]);
-    
-    auto data = reader(buffer.data);
-    
-    auto pr2 = deserialize!PubRec(data);
-    
-    assert(pr == pr2);
-    
-    pr2.packetId = 0xabcd;
-    buffer.clear();
-    
-    wr.serialize(pr2);
-    
-    assert(wr.data.length == 4);
-    assert(wr.data == cast(ubyte[])[
-            0x50, //fixed header
-            0x02, //rest is 2
-            0xab, 0xcd  //packet id
-        ]);
-}

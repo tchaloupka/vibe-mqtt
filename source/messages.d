@@ -679,9 +679,12 @@ struct PubRec
     ushort packetId;
 }
 
+/// A PUBREL Packet is the response to a PUBREC Packet. It is the third packet of the QoS 2 protocol exchange.
 struct PubRel
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.PUBREL, 0x02, 2);
+
+    /// This contains the same Packet Identifier as the PUBREC Packet that is being acknowledged. 
     ushort packetId;
 }
 
