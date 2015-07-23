@@ -1,0 +1,9 @@
+{
+    "name": "serialization",
+    "description": "A MQTT messages serialization tests",
+    "copyright": "Copyright © 2015, Tomáš Chaloupka",
+    "authors": ["Tomáš Chaloupka"],
+    "dependencies": {
+		"mqtt-d": {"version": "~master", "path": "../../"}
+	}
+}
