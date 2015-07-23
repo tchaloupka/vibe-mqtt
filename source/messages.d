@@ -803,17 +803,41 @@ struct UnsubAck
     ushort packetId;
 }
 
+/**
+ * The PINGREQ Packet is sent from a Client to the Server. It can be used to:
+ *
+ * Indicate to the Server that the Client is alive in the absence of any other Control Packets being sent from the Client to the Server.
+ * Request that the Server responds to confirm that it is alive.
+ * Exercise the network to indicate that the Network Connection is active.
+ *
+ * This Packet is used in Keep Alive processing
+ */
 struct PingReq
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.PINGREQ, 0, 0);
 }
 
+/**
+ * A PINGRESP Packet is sent by the Server to the Client in response to a PINGREQ Packet. It indicates that the Server is alive.
+ * This Packet is used in Keep Alive processing.
+ */
 struct PingResp
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.PINGRESP, 0, 0);
 }
 
+/**
+ * The DISCONNECT Packet is the final Control Packet sent from the Client to the Server. It indicates that the Client is disconnecting cleanly.
+ *
+ * After sending a DISCONNECT Packet the Client:
+ *      MUST close the Network Connection.
+ *      MUST NOT send any more Control Packets on that Network Connection.
+ *
+ * On receipt of DISCONNECT the Server:
+ *      MUST discard any Will Message associated with the current connection without publishing it.
+ *      SHOULD close the Network Connection if the Client has not already done so.
+ */
 struct Disconnect
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.DISCONNECT, 0, 0);
 }

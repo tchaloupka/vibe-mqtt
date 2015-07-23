@@ -331,3 +331,37 @@ unittest
     auto unsub2 = deserialize!Unsubscribe(data);
     assert(unsub == unsub2);
 }
+
+unittest
+{
+    void testSimple(T)(ubyte header)
+    {
+        auto s = T();
+
+        auto buffer = appender!(ubyte[]);
+        auto wr = writer(buffer);
+
+        wr.serialize(s);
+
+        assert(wr.data.length == 2);
+
+        //debug writefln("%(%.02x %)", wr.data);
+        assert(wr.data == cast(ubyte[])[header, 0x00]);
+
+        auto data = reader(buffer.data);
+
+        auto s2 = deserialize!T(data);
+
+        assert(s == s2);
+
+        buffer.clear();
+        wr.serialize(s2);
+
+        assert(wr.data.length == 2);
+        assert(wr.data == cast(ubyte[])[header, 0x00]);
+    }
+
+    testSimple!PingReq(0xc0);
+    testSimple!PingResp(0xd0);
+    testSimple!Disconnect(0xe0);
+}
