@@ -43,7 +43,7 @@ enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
         || is(T == Disconnect);
 
 enum bool canReadBase(T) = is(T:ubyte) || is(T:ushort) || is(T:string) 
-    || is(T == FixedHeader) || is(T == ConnectFlags) || is(T == ConnAckFlags);
+    || is(T == FixedHeader) || is(T == ConnectFlags) || is(T == ConnAckFlags) || is(T == Topic);
 
 /// Can T be read by Reader?
 enum bool canRead(T) = canReadBase!T || (isDynamicArray!T && canReadBase!(ElementType!T));

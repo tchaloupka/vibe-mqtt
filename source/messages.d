@@ -519,6 +519,20 @@ struct ConnAckFlags
     }
 }
 
+/// The payload of a SUBSCRIBE Packet
+static struct Topic
+{
+    /**
+     * Topic Filter indicating the Topic to which the Client wants to subscribe.
+     * The Topic Filters in a SUBSCRIBE packet payload MUST be UTF-8 encoded strings.
+     * A Server SHOULD support Topic filters that contain the wildcard characters.
+     * If it chooses not to support topic filters that contain wildcard characters it MUST reject any Subscription request whose filter contains them
+     */
+    string filter;
+    /// This gives the maximum QoS level at which the Server can send Application Messages to the Client.
+    QoSLevel qos;
+}
+
 /// Gets required buffer size to encode into
 @safe @nogc
 uint itemLength(T)(auto ref in T item) pure nothrow
@@ -528,6 +542,14 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T:ushort)) return 2;
     else static if (is(T:string)) return cast(uint)(2 + item.length);
     else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
+    else static if (is(T == Topic)) return 3 + item.filter.length;
+    else static if (is(T == Topic[]))
+    {
+        import std.algorithm : each;
+        uint len;
+        item.each!(a => len += a.itemLength());
+        return len;
+    }
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }
 
@@ -581,6 +603,12 @@ void validate(T)(auto ref in T packet) pure
         checkHeader(0x20, 0xFF, Nullable!uint(0x02));
         enforce(packet.flags <= 1, "Invalid Connect Acknowledge Flags");
         enforce(packet.returnCode <= 5, "Invalid return code");
+    }
+    else static if(is(T == Subscribe))
+    {
+        checkHeader(0x82, 0xFF);
+        enforce(packet.topics.length > 0, "At least one topic filter MUST be provided");
+        enforce(packet.header.length >= 5, "Invalid length");
     }
 }
 
@@ -661,6 +689,7 @@ struct Connect
     string password;
 }
 
+/// Responce to Connect request
 struct ConnAck
 {
     FixedHeader header = FixedHeader(PacketType.CONNACK, 0, 2);
@@ -706,17 +735,28 @@ struct PubRel
 /// The PUBCOMP Packet is the response to a PUBREL Packet. It is the fourth and final packet of the QoS 2 protocol exchange.
 struct PubComp
 {
-    FixedHeader header = FixedHeader(PacketType.PUBCOMP, 0, 2);;
+    FixedHeader header = FixedHeader(PacketType.PUBCOMP, 0, 2);
 
     /// This contains the same Packet Identifier as the PUBREC Packet that is being acknowledged. 
     ushort packetId;
 }
 
-//TODO: SUBSCRIBE
+/**
+ * The SUBSCRIBE Packet is sent from the Client to the Server to create one or more Subscriptions.
+ * Each Subscription registers a Client’s interest in one or more Topics.
+ * The Server sends PUBLISH Packets to the Client in order to forward Application Messages that were published to Topics that match these Subscriptions.
+ * The SUBSCRIBE Packet also specifies (for each Subscription) the maximum QoS with which the Server can send Application Messages to the Client.
+ *
+ * The payload of a SUBSCRIBE packet MUST contain at least one Topic Filter / QoS pair. A SUBSCRIBE packet with no payload is a protocol violation.
+ */
 struct Subscribe
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.SUBSCRIBE, 0x02);
+    /// This contains the Packet Identifier.
     ushort packetId;
+
+    /// Topics to register to
+    Topic[] topics;
 }
 
 /**

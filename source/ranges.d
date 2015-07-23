@@ -114,10 +114,16 @@ struct Writer(R) if (canSerializeTo!(R))
         }
         else static if (is(T == SubscribeReturnCode[]))
         {
-            foreach(ret; val)
-            {
-                write(ret);
-            }
+            foreach(ret; val) write(ret);
+        }
+        else static if (is(T == Topic[]))
+        {
+            foreach(t; val) write(t);
+        }
+        else static if (is(T == Topic))
+        {
+            write(val.filter);
+            write(val.qos);
         }
     }
 
@@ -204,6 +210,11 @@ struct Reader(R) if (canDeserializeFrom!(R))
             {
                 res ~= read!(ElementType!T)();
             }
+        }
+        else static if (is(T == Topic))
+        {
+            res.filter = read!string();
+            res.qos = read!QoSLevel();
         }
 
         return res;
