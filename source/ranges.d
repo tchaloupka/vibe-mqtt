@@ -112,13 +112,9 @@ struct Writer(R) if (canSerializeTo!(R))
             write((cast(ushort)val.length));
             foreach(b; val.representation) put(b);
         }
-        else static if (is(T == SubscribeReturnCode[]))
+        else static if (isDynamicArray!T)
         {
             foreach(ret; val) write(ret);
-        }
-        else static if (is(T == Topic[]))
-        {
-            foreach(t; val) write(t);
         }
         else static if (is(T == Topic))
         {

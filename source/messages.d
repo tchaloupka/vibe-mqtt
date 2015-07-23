@@ -543,7 +543,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T:string)) return cast(uint)(2 + item.length);
     else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
     else static if (is(T == Topic)) return 3 + item.filter.length;
-    else static if (is(T == Topic[]))
+    else static if (isDynamicArray!T)
     {
         import std.algorithm : each;
         uint len;
@@ -752,6 +752,7 @@ struct PubComp
 struct Subscribe
 {
     FixedHeader header = FixedHeader(PacketType.SUBSCRIBE, 0x02);
+    
     /// This contains the Packet Identifier.
     ushort packetId;
 
@@ -778,10 +779,19 @@ struct SubAck
     SubscribeReturnCode[] returnCodes;
 }
 
+/// An UNSUBSCRIBE Packet is sent by the Client to the Server, to unsubscribe from topics.
 struct Unsubscribe
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.UNSUBSCRIBE, 0x02);
+    
+    /// This contains the Packet Identifier.
     ushort packetId;
+    
+    /**
+     * The list of Topic Filters that the Client wishes to unsubscribe from. The Topic Filters in an UNSUBSCRIBE packet MUST be UTF-8 encoded strings.
+     * The Payload of an UNSUBSCRIBE packet MUST contain at least one Topic Filter. An UNSUBSCRIBE packet with no payload is a protocol violation.
+     */
+    string[] topics;
 }
 
 struct UnsubAck

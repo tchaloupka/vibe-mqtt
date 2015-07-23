@@ -302,3 +302,29 @@ unittest
     auto suback2 = deserialize!SubAck(data);
     assert(suback == suback2);
 }
+
+unittest
+{
+    auto unsub = Unsubscribe();
+    unsub.packetId = 0xabcd;
+    unsub.topics ~= "/root/*";
+
+    auto buffer = appender!(ubyte[]);
+    auto wr = writer(buffer);
+
+    wr.serialize(unsub);
+
+    //debug writefln("%(%.02x %)", wr.data);
+    assert(wr.data.length == 13);
+    assert(wr.data == cast(ubyte[])[
+        0xa2, //fixed header
+        0x0b, //rest is 11
+        0xab, 0xcd,  //packet id
+        0x00, 0x07, //filter length
+        0x2f, 0x72, 0x6f, 0x6f, 0x74, 0x2f, 0x2a //filter text
+    ]);
+
+    auto data = reader(buffer.data);
+    auto unsub2 = deserialize!Unsubscribe(data);
+    assert(unsub == unsub2);
+}
