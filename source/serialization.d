@@ -48,7 +48,10 @@ void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacket!T)
 
     foreach(member; __traits(allMembers, T))
     {
+        alias memberType = typeof(__traits(getMember, item, member));
         enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
+        //static if(is(memberType == struct)) pragma(msg, T, ".", member, " is struct");
+        //static if(isDynamicArray!memberType && is(ElementType!memberType == struct)) pragma(msg, T, ".", member, " is struct array");
 
         static if(isMemberVariable)
         {
