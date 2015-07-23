@@ -62,7 +62,7 @@ auto reader(R)(auto ref R input) if (canDeserializeFrom!(R))
 /// simple wrapper for output range to write to
 struct Writer(R) if (canSerializeTo!(R))
 {
-    this(R writer)
+    this(ref R writer)
     {
         _output = writer;
     }
@@ -146,7 +146,7 @@ struct Reader(R) if (canDeserializeFrom!(R))
 
     private uint _remainingLen;
 
-    this(R input)
+    this(ref R input)
     {
         _input = input;
     }

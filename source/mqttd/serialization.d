@@ -42,7 +42,7 @@ debug import std.stdio;
 /**
 * Walk over all members of Mqtt packet, checks if member should be handled and calls defined callback for it
 */
-void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacket!T)
+private void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacket!T)
 {
     import std.typetuple;
 
