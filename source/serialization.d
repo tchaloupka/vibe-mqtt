@@ -225,6 +225,8 @@ unittest
         
         //TODO: Fails but are same
         //assert(px == px2);
+        assert(px.header == px2.header);
+        assert(px.packetId == px2.packetId);
         
         px2.packetId = 0xabcd;
         buffer.clear();
@@ -243,6 +245,7 @@ unittest
     testPubx!PubRec(0x50);
     testPubx!PubRel(0x62);
     testPubx!PubComp(0x70);
+    testPubx!UnsubAck(0xb0);
 }
 
 unittest

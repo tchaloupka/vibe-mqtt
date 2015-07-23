@@ -794,9 +794,12 @@ struct Unsubscribe
     string[] topics;
 }
 
+/// The UNSUBACK Packet is sent by the Server to the Client to confirm receipt of an UNSUBSCRIBE Packet.
 struct UnsubAck
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(PacketType.UNSUBACK, 0, 2);
+
+    /// This contains the same Packet Identifier as the UNSUBSCRIBE Packet that is being acknowledged. 
     ushort packetId;
 }
 
