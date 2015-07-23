@@ -137,14 +137,14 @@ unittest
             0x10, //fixed header
             0x1c, // rest is 28
             0x00, 0x04, //length of MQTT text
-            0x4d, 0x51, 0x54, 0x54, // MQTT
+            'M', 'Q', 'T', 'T', // MQTT
             0x04, //protocol level
             0x80, //just user name flag
             0x00, 0x00, //zero keepalive
             0x00, 0x0a, //length of client identifier
-            0x74, 0x65, 0x73, 0x74, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, //testclient text
+            't', 'e', 's', 't', 'c', 'l', 'i', 'e', 'n', 't', //testclient text
             0x00, 0x04, //username length
-            0x75, 0x73, 0x65, 0x72 //user text
+            'u', 's', 'e', 'r' //user text
         ]);
 
     auto data = reader(wr.data);
@@ -262,7 +262,7 @@ unittest
         0x0c, //rest is 12
         0xab, 0xcd,  //packet id
         0x00, 0x07, //filter length
-        0x2f, 0x72, 0x6f, 0x6f, 0x74, 0x2f, 0x2a, //filter text
+        '/', 'r', 'o', 'o', 't', '/', '*', //filter text
         0x02 //qos
     ]);
 
@@ -317,7 +317,7 @@ unittest
         0x0b, //rest is 11
         0xab, 0xcd,  //packet id
         0x00, 0x07, //filter length
-        0x2f, 0x72, 0x6f, 0x6f, 0x74, 0x2f, 0x2a //filter text
+        '/', 'r', 'o', 'o', 't', '/', '*' //filter text
     ]);
 
     auto data = reader(wr.data);
