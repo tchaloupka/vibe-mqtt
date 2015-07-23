@@ -59,6 +59,7 @@ auto reader(R)(auto ref R input) if (canDeserializeFrom!(R))
     return Reader!R(input);
 }
 
+/// simple wrapper for output range to write to
 struct Writer(R) if (canSerializeTo!(R))
 {
     this(R writer)
@@ -76,6 +77,14 @@ struct Writer(R) if (canSerializeTo!(R))
         @property auto data()
         {
             return _output.data();
+        }
+    }
+
+    static if(__traits(hasMember, R, "clear"))
+    {
+        void clear()
+        {
+            _output.clear();
         }
     }
 
@@ -130,6 +139,7 @@ private:
     static assert(isOutputRange!(Writer, ubyte), "Writer is not Output range!");
 }
 
+/// Simple wrapper for InputRange to read from
 struct Reader(R) if (canDeserializeFrom!(R))
 {
     import std.traits : isDynamicArray;
@@ -199,6 +209,11 @@ struct Reader(R) if (canDeserializeFrom!(R))
             auto length = read!ushort();
             res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
         }
+        else static if (is(T == Topic))
+        {
+            res.filter = read!string();
+            res.qos = read!QoSLevel();
+        }
         else static if (isDynamicArray!T)
         {
             res = T.init;
@@ -206,11 +221,6 @@ struct Reader(R) if (canDeserializeFrom!(R))
             {
                 res ~= read!(ElementType!T)();
             }
-        }
-        else static if (is(T == Topic))
-        {
-            res.filter = read!string();
-            res.qos = read!QoSLevel();
         }
 
         return res;

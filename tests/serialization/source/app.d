@@ -13,11 +13,10 @@ void withMy() {
     con.flags.userName = true;
     con.userName = "user";
 	
-	auto buffer = appender!(ubyte[]);
-	auto wr = writer(buffer);
+	auto wr = writer(appender!(ubyte[]));
 	wr.serialize(con);
 	
-	auto data = reader(buffer.data);
+	auto data = reader(wr.data);
     auto con2 = deserialize!Connect(data);
     assert(con == con2);
 }

@@ -6,6 +6,7 @@ __dummy.html
 *.obj
 *.userprefs
 *.exe
+*.lib
 dub.selections.json
 __test__library__*
 *.sln

@@ -127,9 +127,7 @@ unittest
     con.flags.userName = true;
     con.userName = "user";
 
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
-
+    auto wr = writer(appender!(ubyte[]));
     wr.serialize(con);
 
     assert(wr.data.length == 30);
@@ -149,7 +147,7 @@ unittest
             0x75, 0x73, 0x65, 0x72 //user text
         ]);
 
-    auto data = reader(buffer.data);
+    auto data = reader(wr.data);
 
     auto con2 = deserialize!Connect(data);
     assert(con == con2);
@@ -159,9 +157,7 @@ unittest
 {
     auto conack = ConnAck();
 
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
-
+    auto wr = writer(appender!(ubyte[]));
     wr.serialize(conack);
 
     assert(wr.data.length == 4);
@@ -174,7 +170,7 @@ unittest
             0x00  //return code
         ]);
 
-    auto data = reader(buffer.data);
+    auto data = reader(wr.data);
 
     auto conack2 = deserialize!ConnAck(data);
 
@@ -189,7 +185,7 @@ unittest
 
     conack2.flags = 0x01;
     conack2.returnCode = ConnectReturnCode.NotAuthorized;
-    buffer.clear();
+    wr.clear();
 
     wr.serialize(conack2);
 
@@ -208,9 +204,7 @@ unittest
     {
         auto px = T();
         
-        auto buffer = appender!(ubyte[]);
-        auto wr = writer(buffer);
-        
+        auto wr = writer(appender!(ubyte[]));
         wr.serialize(px);
         
         assert(wr.data.length == 4);
@@ -222,7 +216,7 @@ unittest
                 0x00, 0x00  //packet id
             ]);
         
-        auto data = reader(buffer.data);
+        auto data = reader(wr.data);
         
         auto px2 = deserialize!T(data);
         
@@ -232,7 +226,7 @@ unittest
         assert(px.packetId == px2.packetId);
         
         px2.packetId = 0xabcd;
-        buffer.clear();
+        wr.clear();
         
         wr.serialize(px2);
         
@@ -257,9 +251,7 @@ unittest
     sub.packetId = 0xabcd;
     sub.topics ~= Topic("/root/*", QoSLevel.ExactlyOnce);
 
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
-
+    auto wr = writer(appender!(ubyte[]));
     wr.serialize(sub);
 
     assert(wr.data.length == 14);
@@ -274,7 +266,7 @@ unittest
         0x02 //qos
     ]);
 
-    auto data = reader(buffer.data);
+    auto data = reader(wr.data);
     auto sub2 = deserialize!Subscribe(data);
     assert(sub == sub2);
 }
@@ -288,8 +280,7 @@ unittest
     suback.returnCodes ~= SubscribeReturnCode.QoS2;
     suback.returnCodes ~= SubscribeReturnCode.Failure;
     
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
+    auto wr = writer(appender!(ubyte[]));
     
     wr.serialize(suback);
     
@@ -303,7 +294,7 @@ unittest
             0x00, 0x01, 0x02, 0x80 //ret codes
         ]);
     
-    auto data = reader(buffer.data);
+    auto data = reader(wr.data);
     
     auto suback2 = deserialize!SubAck(data);
     assert(suback == suback2);
@@ -315,8 +306,7 @@ unittest
     unsub.packetId = 0xabcd;
     unsub.topics ~= "/root/*";
 
-    auto buffer = appender!(ubyte[]);
-    auto wr = writer(buffer);
+    auto wr = writer(appender!(ubyte[]));
 
     wr.serialize(unsub);
 
@@ -330,7 +320,7 @@ unittest
         0x2f, 0x72, 0x6f, 0x6f, 0x74, 0x2f, 0x2a //filter text
     ]);
 
-    auto data = reader(buffer.data);
+    auto data = reader(wr.data);
     auto unsub2 = deserialize!Unsubscribe(data);
     assert(unsub == unsub2);
 }
@@ -341,9 +331,7 @@ unittest
     {
         auto s = T();
 
-        auto buffer = appender!(ubyte[]);
-        auto wr = writer(buffer);
-
+        auto wr = writer(appender!(ubyte[]));
         wr.serialize(s);
 
         assert(wr.data.length == 2);
@@ -351,13 +339,13 @@ unittest
         //debug writefln("%(%.02x %)", wr.data);
         assert(wr.data == cast(ubyte[])[header, 0x00]);
 
-        auto data = reader(buffer.data);
+        auto data = reader(wr.data);
 
         auto s2 = deserialize!T(data);
 
         assert(s == s2);
 
-        buffer.clear();
+        wr.clear();
         wr.serialize(s2);
 
         assert(wr.data.length == 2);
