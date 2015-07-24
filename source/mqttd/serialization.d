@@ -39,7 +39,9 @@ debug import std.stdio;
 
 auto serialize(R, T)(auto ref R output, ref T item) if (canSerializeTo!(R))
 {
-    return serializer(output).serialize(item);
+    auto ser = serializer(output);
+    ser.serialize(item);
+    return ser;
 }
 
 auto serializer(R)(auto ref R output) if (canSerializeTo!(R))

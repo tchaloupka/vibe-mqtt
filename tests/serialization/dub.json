@@ -4,6 +4,7 @@
     "copyright": "Copyright © 2015, Tomáš Chaloupka",
     "authors": ["Tomáš Chaloupka"],
     "dependencies": {
-		"mqtt-d": {"version": "~master", "path": "../../"}
+		"mqtt-d": {"version": "~master", "path": "../../"},
+        "msgpack-d": "~>1.0.0-beta.2"
 	}
 }
