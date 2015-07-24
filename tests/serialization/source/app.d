@@ -14,8 +14,7 @@ void test() {
     auto wr = writer(appender!(ubyte[]));
     wr.serialize(con);
     
-    auto des = deserializer(wr.data);
-    auto con2 = des.deserialize!Connect();
+    auto con2 = wr.data.deserialize!Connect();
     assert(con == con2);
 }
 

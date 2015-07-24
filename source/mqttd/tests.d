@@ -186,8 +186,7 @@ unittest
     //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == data);
 
-    auto des = deserializer(wr.data);
-    auto con2 = des.deserialize!Connect();
+    auto con2 = wr.data.deserialize!Connect();
     //auto con2 = deserialize!Connect(data);
     assert(con == con2);
 }
@@ -217,8 +216,7 @@ unittest
     //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == data);
 
-    auto des = deserializer(wr.data);
-    auto conack2 = des.deserialize!ConnAck();
+    auto conack2 = wr.data.deserialize!ConnAck();
     
     // TODO: this for some reason fails..
     //    writefln("%(%.02x %)", *(cast(byte[ConnAck.sizeof]*)(&conack)));
@@ -265,8 +263,7 @@ unittest
         //debug writefln("%(%.02x %)", wr.data);
         assert(wr.data == data);
         
-        auto des = deserializer(wr.data);
-        auto px2 = des.deserialize!T();
+        auto px2 = wr.data.deserialize!T();
         
         //TODO: Fails but are same
         //assert(px == px2);
@@ -312,8 +309,7 @@ unittest
     //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == data);
     
-    auto des = deserializer(wr.data);
-    auto sub2 = des.deserialize!Subscribe();
+    auto sub2 = wr.data.deserialize!Subscribe();
     assert(sub == sub2);
 }
 
@@ -342,8 +338,7 @@ unittest
     //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == data);
     
-    auto des = deserializer(wr.data);
-    auto suback2 = des.deserialize!SubAck();
+    auto suback2 = wr.data.deserialize!SubAck();
     assert(suback == suback2);
 }
 
@@ -369,8 +364,7 @@ unittest
     assert(wr.data.length == 13);
     assert(wr.data == data);
     
-    auto des = deserializer(wr.data);
-    auto unsub2 = des.deserialize!Unsubscribe();
+    auto unsub2 = wr.data.deserialize!Unsubscribe();
     assert(unsub == unsub2);
 }
 
@@ -388,8 +382,7 @@ unittest
         //debug writefln("%(%.02x %)", wr.data);
         assert(wr.data == cast(ubyte[])[header, 0x00]);
         
-        auto des = deserializer(wr.data);
-        auto s2 = des.deserialize!T();
+        auto s2 = wr.data.deserialize!T();
 
         assert(s.header == s2.header);
         
