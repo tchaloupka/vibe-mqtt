@@ -32,3 +32,4 @@ module mqttd;
 public import mqttd.messages;
 public import mqttd.traits;
 public import mqttd.serialization;
+public import mqttd.client;

@@ -51,7 +51,7 @@ auto serializer(R)(auto ref R output) if (canSerializeTo!(R))
 
 struct Serializer(R) if (canSerializeTo!(R))
 {
-    this(R output)
+    this(R output = R.init)
     {
         _output = output;
     }
