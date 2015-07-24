@@ -1,13 +1,11 @@
-import mqttd.messages;
-import mqttd.ranges;
-import mqttd.serialization;
+import mqttd;
 
 import std.datetime;
 import std.conv;
 import std.array;
 import std.stdio;
 
-void withMy() {
+void test() {
     auto con = Connect();
     con.clientIdentifier = "testclient";
     con.flags.userName = true;
@@ -23,6 +21,6 @@ void withMy() {
 
 
 void main() {
-    auto results = benchmark!(withMy)(1_000_000);
-    writeln("My:  ", to!Duration(results[0]));
+    auto results = benchmark!(test)(1_000_000);
+    writeln("Completed in:  ", to!Duration(results[0]));
 }
