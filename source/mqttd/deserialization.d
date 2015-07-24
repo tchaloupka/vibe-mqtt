@@ -36,6 +36,14 @@ import mqttd.messages;
 
 debug import std.stdio;
 
+template deserialize(T)
+{
+    auto deserialize(R)(auto ref R input) if (canDeserializeFrom!(R))
+    {
+        return deserializer(input).deserialize!T();
+    }
+}
+
 auto deserializer(R)(auto ref R input) if (canDeserializeFrom!(R))
 {
     return Deserializer!R(input);
