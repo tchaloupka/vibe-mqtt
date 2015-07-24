@@ -39,9 +39,7 @@ debug import std.stdio;
 
 auto serialize(R, T)(auto ref R output, ref T item) if (canSerializeTo!(R))
 {
-    auto ser = serializer(output);
-    ser.serialize(item);
-    return ser;
+    return serializer(output).serialize(item);
 }
 
 auto serializer(R)(auto ref R output) if (canSerializeTo!(R))
@@ -108,8 +106,9 @@ struct Serializer(R) if (canSerializeTo!(R))
 private:
     R _output;
 
-    void write(T)(T val) if (canWrite!T)
+    ref Serializer write(T)(T val) if (canWrite!T)
     {
+        bool handled = true;
         static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
         {
             put(val.flags);
@@ -152,8 +151,11 @@ private:
         }
         else
         {
-            assert(0, "Not implemented write for: " ~ T.stringof);
+            handled = false;
         }
+        
+        if (handled) return this;
+        assert(0, "Not implemented write for: " ~ T.stringof);
     }
 }
 
