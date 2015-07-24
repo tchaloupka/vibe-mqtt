@@ -35,126 +35,124 @@ import std.array;
 import std.stdio;
 import mqttd;
 
-///// ubyte tests
-//unittest
-//{
-//    ubyte id = 10;
-//    auto bytes = appender!(ubyte[]);
-//    bytes.write(id);
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 0x0A);
-//    
-//    id = 0x2B;
-//    bytes.clear();
-//    
-//    bytes.write(id);
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 0x2B);
-//    
-//    id = [0x11].read!ubyte();
-//    assert(id == 0x11);
-//    
-//    id = read!ubyte([0x22]);
-//    assert(id == 0x22);
-//}
-//
-///// ushort tests
-//unittest
-//{
-//    ushort id = 1;
-//    auto bytes = appender!(ubyte[]);
-//    bytes.write(id);
-//    
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0);
-//    assert(bytes.data[1] == 1);
-//    
-//    id = 0x1A2B;
-//    bytes.clear();
-//    
-//    bytes.write(id);
-//    
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0x1A);
-//    assert(bytes.data[1] == 0x2B);
-//    
-//    id = [0x11, 0x22].read!ushort();
-//    assert(id == 0x1122);
-//}
-//
-///// string tests
-//unittest
-//{
-//    import std.string : representation;
-//
-//    auto name = "test";
-//    auto bytes = appender!(ubyte[]);
-//    bytes.write(name);
-//    
-//    assert(bytes.data.length == 6);
-//    assert(bytes.data[0] == 0);
-//    assert(bytes.data[1] == 4);
-//    assert(bytes.data[2..$] == "test".representation);
-//    
-//    name = (cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation).read!string();
-//    assert(name == "randomname");
-//}
-//
-///// Fixed header tests
-//unittest
-//{
-//    assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
-//    
-//    FixedHeader header = 0x0F;
-//    assert(header.type == PacketType.RESERVED1);
-//    assert(header.dup);
-//    assert(header.retain);
-//    assert(header.qos == QoSLevel.Reserved);
-//    
-//    header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
-//    
-//    auto bytes = appender!(ubyte[]);
-//    bytes.write(header);
-//    
-//    assert(bytes.data.length == 3);
-//    assert(bytes.data[0] == 0x1F);
-//    assert(bytes.data[1] == 0xFF);
-//    assert(bytes.data[2] == 0x01);
-//    
-//    header.length = 10;
-//    bytes.clear();
-//    bytes.write(header);
-//    assert(bytes.data.length == 2);
-//    assert(bytes.data[0] == 0x1F);
-//    assert(bytes.data[1] == 0x0A);
-//    
-//    header = [0x1F, 0x0A].read!FixedHeader();
-//    assert(header.type == PacketType.CONNECT);
-//    assert(header.flags == 0x1F);
-//    assert(header.length == 10);
-//    
-//    header = [0x20, 0x80, 0x02].read!FixedHeader();
-//    assert(header.type == PacketType.CONNACK);
-//    assert(header.flags == 0x20);
-//    assert(header.length == 256);
-//}
-//
-///// ConnectFlags test
-//unittest
-//{
-//    ConnectFlags flags = ConnectFlags(128);
-//    
-//    auto bytes = appender!(ubyte[]);
-//    bytes.write(flags);
-//    
-//    assert(bytes.data.length == 1);
-//    assert(bytes.data[0] == 128);
-//    
-//    flags = [2].read!ConnectFlags();
-//    assert(flags.cleanSession);
-//}
+/// ubyte tests
+unittest
+{
+    ubyte id = 10;
+    auto wr = serializer(appender!(ubyte[]));
+    wr.write(id);
+
+    assert(wr.data.length == 1);
+    assert(wr.data[0] == 0x0A);
+    
+    id = 0x2B;
+    wr.clear();
+    wr.write(id);
+    
+    assert(wr.data.length == 1);
+    assert(wr.data[0] == 0x2B);
+
+    id = deserializer([0x11]).read!ubyte();
+    assert(id == 0x11);
+
+    id = [0x22].deserializer.read!ubyte();
+    assert(id == 0x22);
+}
+
+/// ushort tests
+unittest
+{
+    ushort id = 1;
+    auto wr = serializer(appender!(ubyte[]));
+    wr.write(id);
+    
+    assert(wr.data.length == 2);
+    assert(wr.data[0] == 0);
+    assert(wr.data[1] == 1);
+    
+    id = 0x1A2B;
+    wr.clear();
+    wr.write(id);
+    
+    assert(wr.data.length == 2);
+    assert(wr.data[0] == 0x1A);
+    assert(wr.data[1] == 0x2B);
+    
+    id = [0x11, 0x22].deserializer.read!ushort();
+    assert(id == 0x1122);
+}
+
+/// string tests
+unittest
+{
+    import std.string : representation;
+
+    auto name = "test";
+    auto wr = serializer(appender!(ubyte[]));
+    wr.write(name);
+    
+    assert(wr.data.length == 6);
+    assert(wr.data[0] == 0);
+    assert(wr.data[1] == 4);
+    assert(wr.data[2..$] == "test".representation);
+    
+    name = (cast(ubyte[])[0x00, 0x0A] ~ "randomname".representation).deserializer.read!string();
+    assert(name == "randomname");
+}
+
+/// Fixed header tests
+unittest
+{
+    assert(FixedHeader(PacketType.RESERVED1, true, QoSLevel.Reserved, true) == 0x0F);
+    
+    FixedHeader header = 0x0F;
+    assert(header.type == PacketType.RESERVED1);
+    assert(header.dup);
+    assert(header.retain);
+    assert(header.qos == QoSLevel.Reserved);
+    
+    header = FixedHeader(PacketType.CONNECT, 0x0F, 255);
+    
+    auto wr = serializer(appender!(ubyte[]));
+    wr.write(header);
+    
+    assert(wr.data.length == 3);
+    assert(wr.data[0] == 0x1F);
+    assert(wr.data[1] == 0xFF);
+    assert(wr.data[2] == 0x01);
+    
+    header.length = 10;
+    wr.clear();
+    wr.write(header);
+    assert(wr.data.length == 2);
+    assert(wr.data[0] == 0x1F);
+    assert(wr.data[1] == 0x0A);
+    
+    header = [0x1F, 0x0A].deserializer.read!FixedHeader();
+    assert(header.type == PacketType.CONNECT);
+    assert(header.flags == 0x1F);
+    assert(header.length == 10);
+    
+    header = [0x20, 0x80, 0x02].deserializer.read!FixedHeader();
+    assert(header.type == PacketType.CONNACK);
+    assert(header.flags == 0x20);
+    assert(header.length == 256);
+}
+
+/// ConnectFlags test
+unittest
+{
+    ConnectFlags flags = ConnectFlags(128);
+    
+    auto wr = serializer(appender!(ubyte[]));
+    wr.write(flags);
+    
+    assert(wr.data.length == 1);
+    assert(wr.data[0] == 128);
+    
+    flags = [2].deserializer.read!ConnectFlags();
+    assert(flags.cleanSession);
+}
 
 /// Connect message tests
 unittest
