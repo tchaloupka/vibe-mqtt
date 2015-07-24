@@ -37,12 +37,6 @@ debug import std.stdio;
 
 import mqttd.traits;
 
-/// Condition to indicate if member is used in packet
-struct Condition(alias C)
-{
-    static alias C cond;
-}
-
 /**
 * Exception thrown when package format is somehow malformed
 */
@@ -594,19 +588,15 @@ struct Connect
     string clientIdentifier;
 
     /// Will Topic
-    @Condition!(a => a.flags.will)()
     string willTopic;
 
     /// Will Message
-    @Condition!(a => a.flags.will)()
     string willMessage;
 
     /// User Name
-    @Condition!(a => a.flags.userName)()
     string userName;
 
     /// Password
-    @Condition!(a => a.flags.password)()
     string password;
 }
 
