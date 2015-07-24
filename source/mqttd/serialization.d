@@ -260,9 +260,16 @@ private:
         {
             import std.array;
             import std.algorithm : map;
-            
+
             auto length = read!ushort();
-            res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
+            static if(hasSlicing!R)
+            {
+                //writeln(cast(string)_input[0..length]);
+                res = cast(string)_input[0..length];
+                _remainingLen -= length;
+                _input = _input.length > length ? _input[length..$] : R.init;
+            }
+            else res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
         }
         else static if (isDynamicArray!T)
         {
