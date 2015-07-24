@@ -180,7 +180,7 @@ unittest
     wr.serialize(con);
     
     assert(wr.data.length == 30);
-    
+
     //debug writefln("%(%.02x %)", wr.data);
     assert(wr.data == data);
 

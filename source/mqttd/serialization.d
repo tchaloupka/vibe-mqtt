@@ -56,19 +56,27 @@ struct Serializer(R) if (canSerializeTo!(R))
         _output = output;
     }
 
-    void put(ubyte val)
+    @safe
+    void put(in ubyte val)
     {
         _output.put(val);
     }
-    
+
+    @safe
+    void put(in ubyte[] val)
+    {
+        _output.put(val);
+    }
+
     static if(__traits(hasMember, R, "data"))
     {
-        @property auto data()
+        @safe
+        @property auto data() nothrow
         {
             return _output.data();
         }
     }
-    
+
     static if(__traits(hasMember, R, "clear"))
     {
         void clear()
@@ -82,8 +90,8 @@ struct Serializer(R) if (canSerializeTo!(R))
     {
         static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
-        mixin processMembersTemplate!(uint, `res += (__traits(getMember, item, memberName)).itemLength;`) L;
-        mixin processMembersTemplate!(uint, `write(__traits(getMember, item, memberName));`) W;
+        mixin processMembersTemplate!(uint, `res += f.itemLength;`) L;
+        mixin processMembersTemplate!(uint, `write(f);`) W;
 
         //set remaining packet length by checking packet conditions
         item.header.length = L.processMembers(item);
@@ -131,7 +139,7 @@ private:
             enforce(val.length <= 0xFF, "String too long: ", val);
             
             write((cast(ushort)val.length));
-            foreach(b; val.representation) put(b);
+            put(cast(ubyte[])val);
         }
         else static if (isDynamicArray!T)
         {
@@ -195,12 +203,12 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
         
         static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
         
-        mixin processMembersTemplate!(void, "__traits(getMember, item, memberName) = read!memberType();");
+        mixin processMembersTemplate!(void, "item.tupleof[i] = read!(typeof(f))();");
         
         T res;
         
         processMembers(res);
-        
+
         enforce(empty, "Some data are remaining after packet deserialization!");
         
         // validate initialized packet
@@ -370,28 +378,23 @@ mixin template processMembersTemplate(R, string fn)
         }
         
         import std.typetuple;
-        
-        foreach(memberName; __traits(allMembers, T))
+
+        foreach(i, f; item.tupleof)
         {
-            alias memberType = typeof(__traits(getMember, item, memberName));
-            enum isMemberVariable = is(typeof(() {__traits(getMember, item, memberName) = __traits(getMember, item, memberName).init; }));
-            
-            static if(isMemberVariable)
+            enum memberName = __traits(identifier, T.tupleof[i]);
+            static if (is(T == Connect))
             {
                 //special case for Connect packet
-                static if (is(T == Connect))
+                static if (memberName == "willTopic" || memberName == "willMessage")
                 {
-                    static if (memberName == "willTopic" || memberName == "willMessage")
-                    {
-                        if (!item.flags.will) continue;
-                    }
-                    else static if (memberName == "userName") { if (!item.flags.userName) continue; }
-                    else static if (memberName == "password") { if (!item.flags.password) continue; }
+                    if (!item.flags.will) continue;
                 }
-                
-                //debug writeln("processing ", memberName);
-                mixin(fn);
+                else static if (memberName == "userName") { if (!item.flags.userName) continue; }
+                else static if (memberName == "password") { if (!item.flags.password) continue; }
             }
+
+            //debug writeln("processing ", memberName);
+            mixin(fn);
         }
         
         static if (hasReturn)

@@ -2,6 +2,7 @@ import std.datetime;
 import std.conv;
 import std.array;
 import std.stdio;
+import std.string : format;
 
 import msgpack;
 import mqttd;
@@ -34,15 +35,25 @@ void main()
         sub.topics ~= Topic("/root/*", QoSLevel.ExactlyOnce);
     }
 
+    auto mqttd = appender!(ubyte[]).serialize(con).data;
+    auto msgpack = pack(con);
+
     auto results = benchmark!(
             () => usingMQTTD(con), 
-            () => usingMSGPACK(con),
-            () => usingMQTTD(sub), 
-            () => usingMSGPACK(sub),
+            () => usingMSGPACK(con)
         )(1_000_000);
 
-    writeln("MQTT-D (Connect):  ", to!Duration(results[0]));
-    writeln("MSGPACK-D (Connect):  ", to!Duration(results[1]));
-    writeln("MQTT-D (Subscribe):  ", to!Duration(results[2]));
-    writeln("MSGPACK-D (Subscribe):  ", to!Duration(results[3]));
+    writeln(format("MQTT-D (Connect[%d]): ", mqttd.length), to!Duration(results[0]));
+    writeln(format("MSGPACK-D (Connect[%d]): ", msgpack.length), to!Duration(results[1]));
+
+    mqttd = appender!(ubyte[]).serialize(sub).data;
+    msgpack = pack(sub);
+
+    results = benchmark!(
+        () => usingMQTTD(sub), 
+        () => usingMSGPACK(sub),
+        )(1_000_000);
+    
+    writeln(format("MQTT-D (Subscribe[%d]): ", mqttd.length), to!Duration(results[0]));
+    writeln(format("MSGPACK-D (Subscribe[%d]): ", msgpack.length), to!Duration(results[1]));
 }
