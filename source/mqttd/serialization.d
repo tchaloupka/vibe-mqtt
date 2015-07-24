@@ -31,7 +31,6 @@ module mqttd.serialization;
 
 import std.string : format;
 import std.range;
-import std.typecons;
 
 import mqttd.messages;
 import mqttd.traits;
@@ -46,47 +45,6 @@ auto serialize(R, T)(auto ref R output, ref T item) if (canSerializeTo!(R))
 auto serializer(R)(auto ref R output) if (canSerializeTo!(R))
 {
     return Serializer!R(output);
-}
-
-/**
-* Walk over all members of Mqtt packet, checks if member should be handled and calls defined callback for it
-*/
-private void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacket!T)
-{
-    import std.typetuple;
-
-    foreach(member; __traits(allMembers, T))
-    {
-        alias memberType = typeof(__traits(getMember, item, member));
-        enum isMemberVariable = is(typeof(() {__traits(getMember, item, member) = __traits(getMember, item, member).init; }));
-        //static if(is(memberType == struct)) pragma(msg, T, ".", member, " is struct");
-        //static if(isDynamicArray!memberType && is(ElementType!memberType == struct)) pragma(msg, T, ".", member, " is struct array");
-
-        static if(isMemberVariable)
-        {
-            auto include = true;
-            foreach(attr; __traits(getAttributes, __traits(getMember, item, member)))
-            {
-                enum idx = staticIndexOf!(attr, __traits(getAttributes, __traits(getMember, item, member)));
-                static if(isCondition!(typeof(attr)))
-                {
-                    //check condition
-                    auto attribute = mixin(`__traits(getAttributes, T.` ~ member ~ `)`)[idx];
-                    if(!attribute.cond(item))
-                    {
-                        include = false;
-                        continue;
-                    }
-                }
-            }
-
-            if(include)
-            {
-                //debug writeln("processing ", member);
-                memberCallback(__traits(getMember, item, member));
-            }
-        }
-    }
 }
 
 struct Serializer(R) if (canSerializeTo!(R))
@@ -122,10 +80,11 @@ struct Serializer(R) if (canSerializeTo!(R))
     {
         static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
+        mixin processMembersTemplate!(uint, `res += (__traits(getMember, item, memberName)).itemLength;`) L;
+        mixin processMembersTemplate!(uint, `write(__traits(getMember, item, memberName));`) W;
+
         //set remaining packet length by checking packet conditions
-        int len;
-        item.processMembers!(a => len += a.itemLength);
-        item.header.length = len;
+        item.header.length = L.processMembers(item);
 
         //check if is valid
         try item.validate();
@@ -133,7 +92,7 @@ struct Serializer(R) if (canSerializeTo!(R))
             throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
 
         //write members to output writer
-        item.processMembers!((ref a) => write(a));
+        W.processMembers(item);
     }
 
 private:
@@ -176,10 +135,266 @@ private:
         {
             foreach(ret; val) write(ret);
         }
-        else static if (is(T == Topic))
+        else static if (is(T == struct)) //write struct members individually
         {
-            write(val.filter);
-            write(val.qos);
+            foreach(memberName; __traits(allMembers, T))
+                write(__traits(getMember, val, memberName));
+        }
+        else
+        {
+            assert(0, "Not implemented write for: " ~ T.stringof);
+        }
+    }
+}
+
+template deserialize(T)
+{
+    auto deserialize(R)(auto ref R input) if (canDeserializeFrom!(R))
+    {
+        return deserializer(input).deserialize!T();
+    }
+}
+
+auto deserializer(R)(auto ref R input) if (canDeserializeFrom!(R))
+{
+    return Deserializer!R(input);
+}
+
+struct Deserializer(R) if (canDeserializeFrom!(R))
+{
+    this(R input)
+    {
+        _input = input;
+    }
+    
+    @property ubyte front()
+    {
+        //debug writef("%.02x ", _input.front);
+        return cast(ubyte)_input.front;
+    }
+    
+    @property bool empty()
+    {
+        //debug if (_input.empty) writeln();
+        return _input.empty;
+    }
+    
+    void popFront()
+    {
+        _input.popFront();
+        if(_remainingLen > 0) _remainingLen--; //decrease remaining length set from fixed header
+        //debug writefln("Pop: %s", empty? "empty" : format("%.02x", front));
+    }
+    
+    T deserialize(T)() if (isMqttPacket!T)
+    {
+        import std.typetuple;
+        import std.exception : enforce;
+        
+        static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
+        
+        mixin processMembersTemplate!(void, "__traits(getMember, item, memberName) = read!memberType();");
+        
+        T res;
+        
+        processMembers(res);
+        
+        enforce(empty, "Some data are remaining after packet deserialization!");
+        
+        // validate initialized packet
+        try res.validate();
+        catch (Exception ex) 
+            throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
+        
+        return res;
+    }
+    
+private:
+    R _input;
+    uint _remainingLen;
+    
+    T read(T)() if (canRead!T)
+    {
+        auto handled = true;
+        T res = void;
+
+        static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
+        {
+            res.flags = read!ubyte();
+            res.length = 0;
+            
+            uint multiplier = 1;
+            ubyte digit;
+            do
+            {
+                digit = read!ubyte();
+                res.length += ((digit & 127) * multiplier);
+                multiplier *= 128;
+                if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
+            } while ((digit & 128) != 0);
+            
+            //set remaining length for calculations
+            _remainingLen = res.length;
+        }
+        else static if (is(T:ubyte))
+        {
+            res = cast(T)front;
+            popFront();
+        }
+        else static if (is(T:ushort))
+        {
+            res = cast(ushort) (read!ubyte() << 8);
+            res |= cast(ushort) read!ubyte();
+        }
+        else static if (is(T:string))
+        {
+            import std.array;
+            import std.algorithm : map;
+            
+            auto length = read!ushort();
+            res = (&this).takeExactly(length).map!(a => cast(immutable char)a).array;
+        }
+        else static if (isDynamicArray!T)
+        {
+            res = T.init;
+            while(_remainingLen > 0) // read to end
+            {
+                res ~= read!(ElementType!T)();
+            }
+        }
+        else static if (is(T == struct)) //read struct members individually
+        {
+            foreach(memberName; __traits(allMembers, T))
+                __traits(getMember, res, memberName) = read!(typeof(__traits(getMember, res, memberName)))();
+        }
+        else
+        {
+            handled = false;
+        }
+
+        if (handled) return res;
+        assert(0, "Not implemented read for: " ~ T.stringof);
+    }
+}
+
+/// Gets required buffer size to encode into
+@safe @nogc
+uint itemLength(T)(auto ref in T item) pure nothrow
+{
+    static if (is(T == FixedHeader)) return 0;
+    else static if (is(T:ubyte)) return 1;
+    else static if (is(T:ushort)) return 2;
+    else static if (is(T:string)) return cast(uint)(2 + item.length);
+    else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
+    else static if (is(T == Topic)) return 3 + item.filter.length;
+    else static if (isDynamicArray!T)
+    {
+        import std.algorithm : each;
+        uint len;
+        item.each!(a => len += a.itemLength());
+        return len;
+    }
+    else assert(0, "Not implemented itemLength for " ~ T.stringof);
+}
+
+@safe
+void validate(T)(auto ref in T packet) pure
+{
+    import std.string : format;
+    
+    static if (__traits(hasMember, T, "header"))
+    {
+        void checkHeader(ubyte value, ubyte mask = 0xFF, Nullable!uint length = Nullable!uint())
+        {
+            enforce((mask & 0xF0) == 0x00 
+                || (packet.header & 0xF0 & mask) == (value & 0xF0), 
+                "Wrong packet type");
+            
+            enforce((mask & 0x0F) == 0x00 
+                || (packet.header & 0x0F & mask) == (value & 0x0F), 
+                "Wrong fixed header flags");
+            
+            enforce(length.isNull || packet.header.length == length.get, "Wrong fixed header length");
+        }
+    }
+    
+    static if (__traits(hasMember, T, "clientIdentifier"))
+    {
+        enforce(packet.clientIdentifier.length > 0 && packet.clientIdentifier.length < 24,
+            "Client Identifier SHOULD be 1 to 23 characters long");
+    }
+    
+    static if (is(T == ConnectFlags))
+    {
+        enforce(packet.will || (packet.willQoS == QoSLevel.AtMostOnce && !packet.willRetain), 
+            "WillQoS and Will Retain MUST be 0 if Will flag is not set");
+        enforce(packet.userName || !packet.password, "Password MUST be set to 0 if User flag is 0");
+    }
+    else static if (is(T == Connect))
+    {
+        checkHeader(0x10);
+        enforce(packet.header.length != 0, "Length must be set!");
+        enforce(packet.protocolName == MQTT_PROTOCOL_NAME, 
+            format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
+        enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1, 
+            format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
+        packet.flags.validate();
+        enforce(!packet.flags.userName || packet.userName.length > 0, "Username not set");
+        enforce(packet.flags.userName || !packet.flags.password > 0, "Username not set, but password is");
+    }
+    else static if (is(T == ConnAck))
+    {
+        checkHeader(0x20, 0xFF, Nullable!uint(0x02));
+        enforce(packet.flags <= 1, "Invalid Connect Acknowledge Flags");
+        enforce(packet.returnCode <= 5, "Invalid return code");
+    }
+    else static if(is(T == Subscribe))
+    {
+        checkHeader(0x82, 0xFF);
+        enforce(packet.topics.length > 0, "At least one topic filter MUST be provided");
+        enforce(packet.header.length >= 5, "Invalid length");
+    }
+}
+
+mixin template processMembersTemplate(R, string fn)
+{
+    private R processMembers(T)(ref T item) if (isMqttPacket!T)
+    {
+        enum hasReturn = !is(R == void);
+        
+        static if (hasReturn)
+        {
+            R res;
+        }
+        
+        import std.typetuple;
+        
+        foreach(memberName; __traits(allMembers, T))
+        {
+            alias memberType = typeof(__traits(getMember, item, memberName));
+            enum isMemberVariable = is(typeof(() {__traits(getMember, item, memberName) = __traits(getMember, item, memberName).init; }));
+            
+            static if(isMemberVariable)
+            {
+                //special case for Connect packet
+                static if (is(T == Connect))
+                {
+                    static if (memberName == "willTopic" || memberName == "willMessage")
+                    {
+                        if (!item.flags.will) continue;
+                    }
+                    else static if (memberName == "userName") { if (!item.flags.userName) continue; }
+                    else static if (memberName == "password") { if (!item.flags.password) continue; }
+                }
+                
+                //debug writeln("processing ", memberName);
+                mixin(fn);
+            }
+        }
+        
+        static if (hasReturn)
+        {
+            return res;
         }
     }
 }
