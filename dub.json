@@ -4,6 +4,17 @@
     "copyright": "Copyright © 2015, Tomáš Chaloupka",
     "authors": ["Tomáš Chaloupka"],
     "targetType": "library",
-    "dependencies": {
+    "configurations": [
+        {
+            "name": "vibed",
+            "dependencies": {
+                "vibe-d": "~>0.7.24-beta.4"
+            },
+            "versions": [
+            ]
+        }
+    ],
+    "subConfigurations": {
+        "vibe-d": "libasync"
     }
 }

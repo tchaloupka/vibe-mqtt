@@ -317,13 +317,16 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T:ushort)) return 2;
     else static if (is(T:string)) return cast(uint)(2 + item.length);
     else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
-    else static if (is(T == Topic)) return 3 + item.filter.length;
+    else static if (is(T == Topic)) return 3u + cast(uint)item.filter.length;
     else static if (isDynamicArray!T)
     {
-        import std.algorithm : each;
-        uint len;
-        item.each!(a => len += a.itemLength());
-        return len;
+        static if (is(ElementType!T == ubyte)) return cast(uint)item.length;
+        else
+        {
+            uint len;
+            foreach(ref e; item) len += e.itemLength();
+            return len;
+        }
     }
     else assert(0, "Not implemented itemLength for " ~ T.stringof);
 }

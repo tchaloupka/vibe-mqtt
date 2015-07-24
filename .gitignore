@@ -8,7 +8,7 @@ __dummy.html
 *.exe
 *.lib
 dub.selections.json
-__test__library__*
+__test__*
 *.sln
 *.visualdproj
 .vs
