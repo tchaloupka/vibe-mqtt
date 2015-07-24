@@ -35,9 +35,18 @@ import std.typecons;
 
 import mqttd.messages;
 import mqttd.traits;
-import mqttd.ranges;
 
 debug import std.stdio;
+
+auto serialize(R, T)(auto ref R output, ref T item) if (canSerializeTo!(R))
+{
+    return serializer(output).serialize(item);
+}
+
+auto serializer(R)(auto ref R output) if (canSerializeTo!(R))
+{
+    return Serializer!R(output);
+}
 
 /**
 * Walk over all members of Mqtt packet, checks if member should be handled and calls defined callback for it
@@ -80,22 +89,97 @@ private void processMembers(alias memberCallback, T)(ref T item) if (isMqttPacke
     }
 }
 
-/// Serialize given Mqtt packet
-void serialize(W, T)(ref W wtr, ref T item) if (isMqttPacket!T && is(W == Writer!Out, Out))
+struct Serializer(R) if (canSerializeTo!(R))
 {
-    static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
+    this(R output)
+    {
+        _output = output;
+    }
 
-    //set remaining packet length by checking packet conditions
-    int len;
-    item.processMembers!(a => len += a.itemLength);
-    item.header.length = len;
+    void put(ubyte val)
+    {
+        _output.put(val);
+    }
+    
+    static if(__traits(hasMember, R, "data"))
+    {
+        @property auto data()
+        {
+            return _output.data();
+        }
+    }
+    
+    static if(__traits(hasMember, R, "clear"))
+    {
+        void clear()
+        {
+            _output.clear();
+        }
+    }
 
-    //check if is valid
-    try item.validate();
-    catch (Exception ex) 
-        throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
+    /// Serialize given Mqtt packet
+    void serialize(T)(ref T item) if (isMqttPacket!T)
+    {
+        static assert(hasFixedHeader!T, format("'%s' packet has no required header field!", T.stringof));
 
-    //write members to output writer
-    item.processMembers!((ref a) => wtr.write(a));
+        //set remaining packet length by checking packet conditions
+        int len;
+        item.processMembers!(a => len += a.itemLength);
+        item.header.length = len;
+
+        //check if is valid
+        try item.validate();
+        catch (Exception ex) 
+            throw new PacketFormatException(format("'%s' packet is not valid: %s", T.stringof, ex.msg), ex);
+
+        //write members to output writer
+        item.processMembers!((ref a) => write(a));
+    }
+
+private:
+    R _output;
+
+    void write(T)(T val) if (canWrite!T)
+    {
+        static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
+        {
+            put(val.flags);
+            
+            int tmp = val.length;
+            do
+            {
+                byte digit = tmp % 128;
+                tmp /= 128;
+                if (tmp > 0) digit |= 0x80;
+                put(digit);
+            } while (tmp > 0);
+        }
+        else static if (is(T:ubyte))
+        {
+            put(val);
+        }
+        else static if (is(T:ushort))
+        {
+            put(cast(ubyte) (val >> 8));
+            put(cast(ubyte) val);
+        }
+        else static if (is(T:string))
+        {
+            import std.string : representation;
+            
+            enforce(val.length <= 0xFF, "String too long: ", val);
+            
+            write((cast(ushort)val.length));
+            foreach(b; val.representation) put(b);
+        }
+        else static if (isDynamicArray!T)
+        {
+            foreach(ret; val) write(ret);
+        }
+        else static if (is(T == Topic))
+        {
+            write(val.filter);
+            write(val.qos);
+        }
+    }
 }
-

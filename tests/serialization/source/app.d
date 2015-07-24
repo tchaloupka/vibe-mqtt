@@ -11,7 +11,7 @@ void test() {
     con.flags.userName = true;
     con.userName = "user";
     
-    auto wr = writer(appender!(ubyte[]));
+    auto wr = appender!(ubyte[]);
     wr.serialize(con);
     
     auto con2 = wr.data.deserialize!Connect();

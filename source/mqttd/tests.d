@@ -178,7 +178,7 @@ unittest
     con.flags.userName = true;
     con.userName = "user";
     
-    auto wr = writer(appender!(ubyte[]));
+    auto wr = appender!(ubyte[]);
     wr.serialize(con);
     
     assert(wr.data.length == 30);
@@ -208,7 +208,7 @@ unittest
 
     auto conack = ConnAck();
     
-    auto wr = writer(appender!(ubyte[]));
+    auto wr = appender!(ubyte[]);
     wr.serialize(conack);
     
     assert(wr.data.length == 4);
@@ -255,7 +255,7 @@ unittest
 
         auto px = T();
         
-        auto wr = writer(appender!(ubyte[]));
+        auto wr = appender!(ubyte[]);
         wr.serialize(px);
         
         assert(wr.data.length == 4);
@@ -301,7 +301,7 @@ unittest
     sub.packetId = 0xabcd;
     sub.topics ~= Topic("/root/*", QoSLevel.ExactlyOnce);
     
-    auto wr = writer(appender!(ubyte[]));
+    auto wr = appender!(ubyte[]);
     wr.serialize(sub);
     
     assert(wr.data.length == 14);
@@ -329,8 +329,7 @@ unittest
     suback.returnCodes ~= SubscribeReturnCode.QoS2;
     suback.returnCodes ~= SubscribeReturnCode.Failure;
     
-    auto wr = writer(appender!(ubyte[]));
-    
+    auto wr = appender!(ubyte[]);
     wr.serialize(suback);
     
     assert(wr.data.length == 8);
@@ -356,8 +355,7 @@ unittest
     unsub.packetId = 0xabcd;
     unsub.topics ~= "/root/*";
     
-    auto wr = writer(appender!(ubyte[]));
-    
+    auto wr = appender!(ubyte[]);
     wr.serialize(unsub);
     
     //debug writefln("%(%.02x %)", wr.data);
@@ -374,7 +372,7 @@ unittest
     {
         auto s = T();
         
-        auto wr = writer(appender!(ubyte[]));
+        auto wr = appender!(ubyte[]);
         wr.serialize(s);
         
         assert(wr.data.length == 2);
