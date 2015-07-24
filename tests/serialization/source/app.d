@@ -10,12 +10,12 @@ void test() {
     con.clientIdentifier = "testclient";
     con.flags.userName = true;
     con.userName = "user";
-	
-	auto wr = writer(appender!(ubyte[]));
-	wr.serialize(con);
-	
-	auto data = reader(wr.data);
-    auto con2 = deserialize!Connect(data);
+    
+    auto wr = writer(appender!(ubyte[]));
+    wr.serialize(con);
+    
+    auto des = deserializer(wr.data);
+    auto con2 = des.deserialize!Connect();
     assert(con == con2);
 }
 

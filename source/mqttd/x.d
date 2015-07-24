@@ -1,11 +1,11 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/package.d
+ * C:\Projects\mqtt-d\source\mqttd\x.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
  * 
- * Copyright (c) 2015 Tomáš Chaloupka
+ * Copyright (c) 2015 ${CopyrightHolder}
  * 
  * Boost Software License 1.0 (BSL-1.0)
  * 
@@ -27,10 +27,13 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module mqttd;
+module mqttd.x;
 
-public import mqttd.messages;
-public import mqttd.traits;
-public import mqttd.ranges;
-public import mqttd.serialization;
-public import mqttd.deserialization;
+class x
+{
+    this()
+    {
+        // Constructor code
+    }
+}
+

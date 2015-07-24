@@ -5,7 +5,7 @@
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
  * 
- * Copyright (c) 2015 ${CopyrightHolder}
+ * Copyright (c) 2015 Tomáš Chaloupka
  * 
  * Boost Software License 1.0 (BSL-1.0)
  * 
