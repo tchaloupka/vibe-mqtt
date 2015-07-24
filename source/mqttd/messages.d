@@ -610,11 +610,33 @@ struct ConnAck
     ConnectReturnCode returnCode;
 }
 
-//TODO: PUBLISH
+/// A PUBLISH Control Packet is sent from a Client to a Server or from Server to a Client to transport an Application Message.
 struct Publish
 {
-    FixedHeader header;
+    FixedHeader header = FixedHeader(0x30);
+    /**
+     * The Topic Name identifies the information channel to which payload data is published.
+     * 
+     * The Topic Name MUST be present as the first field in the PUBLISH Packet Variable header.
+     * It MUST be a UTF-8 encoded string.
+     * 
+     * The Topic Name in the PUBLISH Packet MUST NOT contain wildcard characters.
+     * The Topic Name in a PUBLISH Packet sent by a Server to a subscribing Client MUST match the Subscription’s
+     * Topic Filter according to the matching process.
+     * However, since the Server is permitted to override the Topic Name, it might not be the same as the Topic Name
+     * in the original PUBLISH Packet.
+     */
+    string topic;
+    /// The Packet Identifier field is only present in PUBLISH Packets where the QoS level is 1 or 2
     ushort packetId; // if QoS > 0
+    /**
+     * The Payload contains the Application Message that is being published.
+     * The content and format of the data is application specific.
+     * The length of the payload can be calculated by subtracting the length of the variable header from
+     * the Remaining Length field that is in the Fixed Header.
+     * It is valid for a PUBLISH Packet to contain a zero length payload.
+     */
+    ubyte[] payload;
 }
 
 /// A PUBACK Packet is the response to a PUBLISH Packet with QoS level 1.

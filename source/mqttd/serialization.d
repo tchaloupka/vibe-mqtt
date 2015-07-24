@@ -144,7 +144,8 @@ private:
         }
         else static if (isDynamicArray!T)
         {
-            foreach(ret; val) write(ret);
+            static if (is(ElementType!T == ubyte)) put(val);
+            else foreach(ret; val) write(ret);
         }
         else static if (is(T == struct)) //write struct members individually
         {
@@ -278,9 +279,18 @@ private:
         else static if (isDynamicArray!T)
         {
             res = T.init;
-            while(_remainingLen > 0) // read to end
+            static if (is(ElementType!T == ubyte) && hasSlicing!R) //slice it
             {
-                res ~= read!(ElementType!T)();
+                res = _input[0..$];
+                _remainingLen -= res.length;
+                _input = R.init;
+            }
+            else
+            {
+                while(_remainingLen > 0) // read to end
+                {
+                    res ~= read!(ElementType!T)();
+                }
             }
         }
         else static if (is(T == struct)) //read struct members individually
@@ -393,15 +403,18 @@ mixin template processMembersTemplate(R, string fn)
         foreach(i, f; item.tupleof)
         {
             enum memberName = __traits(identifier, T.tupleof[i]);
-            static if (is(T == Connect))
+            static if (is(T == Connect)) //special case for Connect packet
             {
-                //special case for Connect packet
                 static if (memberName == "willTopic" || memberName == "willMessage")
                 {
                     if (!item.flags.will) continue;
                 }
                 else static if (memberName == "userName") { if (!item.flags.userName) continue; }
                 else static if (memberName == "password") { if (!item.flags.password) continue; }
+            }
+            else static if(is(T == Publish)) //special case for Publish packet
+            {
+                static if (memberName == "packetId") if (item.header.qos == QoSLevel.AtMostOnce) continue;
             }
 
             //debug writeln("processing ", memberName);

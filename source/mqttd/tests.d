@@ -237,6 +237,34 @@ unittest
 
 unittest
 {
+    ubyte[] data = [
+        0x33, //fixed header
+        0x12, //rest is 18
+        0x00, 0x09, //topic length
+        '/', 'r', 'o', 'o', 't', '/', 's', 'e', 'c', //filter text
+        0xab, 0xcd,  //packet id
+        0x01, 0x2, 0x3, 0x4, 0x5 //payload
+    ];
+    
+    auto pub = Publish();
+    pub.header.qos = QoSLevel.AtLeastOnce;
+    pub.header.retain = true;
+    pub.packetId = 0xabcd;
+    pub.topic = "/root/sec";
+    pub.payload = [1, 2, 3, 4, 5];
+    
+    auto wr = appender!(ubyte[]).serialize(pub);
+    
+    assert(wr.data.length == 20);
+    
+    assert(wr.data == data);
+    
+    auto pub2 = wr.data.deserialize!Publish();
+    assert(pub == pub2);
+}
+
+unittest
+{
     void testPubx(T)(ubyte header)
     {
         ubyte[] data = [
