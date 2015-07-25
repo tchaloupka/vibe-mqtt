@@ -38,6 +38,9 @@ import vibe.core.net: TCPConnection;
 import vibe.core.stream;
 import vibe.core.task;
 import std.datetime;
+import std.exception;
+import std.string : format;
+import std.traits;
 
 struct Settings
 {
@@ -51,17 +54,21 @@ struct Settings
 class MqttClient
 {
     import std.array : Appender;
+    import vibe.utils.array : FixedRingBuffer;
 
     this(Settings settings)
     {
         import std.socket : Socket;
 
         _settings = settings;
-        _sendBuffer = Serializer!(Appender!(ubyte[]))();
-        if (_settings.clientId.length == 0) _settings.clientId = Socket.hostName;
-        debug writeln(Socket.hostName);
+        if (_settings.clientId.length == 0) // set clientId if not provided
+            _settings.clientId = Socket.hostName;
+
+        _readBuffer.freeOnDestruct = true;
+        _readBuffer.capacity = 4 * 1024;
     }
 
+    /// Connects to the specified broker and sends it the Connect packet
     final void connect()
     in { assert(_con is null ? true : !_con.connected); }
     body
@@ -90,16 +97,104 @@ class MqttClient
         send(con);
     }
 
-    final void send(T)(auto ref T msg)
+    /// Sends Disconnect packet to the broker and closes the underlying connection
+    final void disconnect()
+    in { assert(!(_con is null)); }
+    body
     {
-        _sendBuffer.clear();
-        _sendBuffer.serialize(msg);
+        version(MqttDebug) logDebug("MQTT Disconnectng from Broker");
 
         if (_con.connected)
         {
-            debug writefln("OUT: %(%.02x %)", _sendBuffer.data);
-            _con.write(_sendBuffer.data);
+            if(Task.getThis !is _listener)
+                _listener.join;
+
+            send(Disconnect());
+            _con.flush();
+            _con.close();
         }
+    }
+
+    final @property bool connected() const
+    in { assert(!(_con is null)); }
+    body
+    {
+        return _con.connected;
+    }
+
+    /**
+     * Publishes the message on the specified topic
+     *  
+     *  Params:
+     *      topic = Topic to send message to
+     *      payload = Content of the message
+     *      qos = Required QoSLevel to handle message (default is QoSLevel.AtMostOnce)
+     *      retain = If true, the server must store the message so that it can be delivered to future subscribers
+     *
+     */
+    final void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.AtMostOnce, bool retain = false)
+        if (isSomeString!T || (isArray!T && is(ForeachType!T : ubyte)))
+    {
+        auto pub = Publish();
+        pub.header.qos = qos;
+        pub.header.retain = retain;
+        pub.topic = topic;
+        pub.payload = cast(ubyte[]) payload;
+        if (qos == QoSLevel.AtLeastOnce || qos == QoSLevel.ExactlyOnce)
+            pub.packetId = nextPacketId();
+
+        send(pub);
+    }
+
+    void onConnAck(ConnAck packet)
+    {
+        version(MqttDebug) logDebug("MQTT onConnAck - %s", packet);
+
+        if(packet.returnCode == ConnectReturnCode.ConnectionAccepted)
+        {
+            version(MqttDebug) logDebug("MQTT Connection accepted");
+        }
+        else throw new Exception(format("Connection refused: %s", packet.returnCode));
+    }
+    
+    void onPingResp(PingResp packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPingResp - %s", packet);
+    }
+
+    void onPubAck(PubAck packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPubAck - %s", packet);
+    }
+
+    void onPubRec(PubRec packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPubRec - %s", packet);
+    }
+
+    void onPubRel(PubRel packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPubRel - %s", packet);
+    }
+
+    void onPubComp(PubComp packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPubComp - %s", packet);
+    }
+
+    void onPublish(Publish packet)
+    {
+        version(MqttDebug) logDebug("MQTT onPublish - %s", packet);
+    }
+
+    void onSubAck(SubAck packet)
+    {
+        version(MqttDebug) logDebug("MQTT onSubAck - %s", packet);
+    }
+
+    void onUnsubAck(UnsubAck packet)
+    {
+        version(MqttDebug) logDebug("MQTT onUnsubAck - %s", packet);
     }
 
 private:
@@ -107,72 +202,125 @@ private:
     TCPConnection _con;
     Task _listener;
     Serializer!(Appender!(ubyte[])) _sendBuffer;
+    FixedRingBuffer!ubyte _readBuffer;
+    ubyte[] _packetBuffer;
+    ushort _packetId = 1u;
 
 final:
+
+    /// Processes data in read buffer. If whole packet is presented, it delegates it to handler
+    void proccessData(in ubyte[] data)
+    {
+        import mqttd.serialization;
+        import std.range;
+
+        version(MqttDebug) logDebug("MQTT IN: %(%.02x %)", data);
+
+        if (_readBuffer.freeSpace < data.length) // ensure all fits to the buffer
+            _readBuffer.capacity = _readBuffer.capacity + data.length;
+        _readBuffer.put(data);
+
+        if (_readBuffer.length > 0)
+        {
+            // try read packet header
+            FixedHeader header = _readBuffer[0]; // type + flags
+
+            // try read remaining length
+            uint pos;
+            uint multiplier = 1;
+            ubyte digit;
+            do
+            {
+                if (++pos >= _readBuffer.length) return; // not enough data
+                digit = _readBuffer[pos];
+                header.length += ((digit & 127) * multiplier);
+                multiplier *= 128;
+                if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
+            } while ((digit & 128) != 0);
+
+            if (_readBuffer.length < header.length + pos + 1) return; // not enough data
+
+            // we've got the whole packet to handle
+            _packetBuffer.length = 1 + pos + header.length; // packet type byte + remaining size bytes + remaining size
+            _readBuffer.read(_packetBuffer); // read whole packet from read buffer
+
+            with (PacketType)
+            {
+                switch (header.type)
+                {
+                    case CONNACK:
+                        onConnAck(_packetBuffer.deserialize!ConnAck());
+                        break;
+                    case PINGRESP:
+                        onPingResp(_packetBuffer.deserialize!PingResp());
+                        break;
+                    case PUBACK:
+                        onPubAck(_packetBuffer.deserialize!PubAck());
+                        break;
+                    case PUBREC:
+                        onPubRec(_packetBuffer.deserialize!PubRec());
+                        break;
+                    case PUBREL:
+                        onPubRel(_packetBuffer.deserialize!PubRel());
+                        break;
+                    case PUBCOMP:
+                        onPubComp(_packetBuffer.deserialize!PubComp());
+                        break;
+                    case PUBLISH:
+                        onPublish(_packetBuffer.deserialize!Publish());
+                        break;
+                    case SUBACK:
+                        onSubAck(_packetBuffer.deserialize!SubAck());
+                        break;
+                    case UNSUBACK:
+                        onUnsubAck(_packetBuffer.deserialize!UnsubAck());
+                        break;
+                    default:
+                        throw new Exception(format("Unexpected packet type '%s'", header.type));
+                }
+            }
+        }
+    }
+
     void listener()
     in { assert(_con && _con.connected); }
     body
     {
         import vibe.core.log: logError;
-        import vibe.core.core: sleep;
-
-        auto buffer = Appender!(ubyte[])();
-
-        size_t bytesRead;
-        FixedHeader readFixedHeader()
-        {
-            ubyte[] buf = new ubyte[](4);
-            if( !_con.empty )
-            {
-                auto least_size = _con.leastSize(); //Blocks until data is available
-                auto str = _con.peek();
-                if(str.length == 0)
-                {
-                    _con.read(buf);
-                    str = buf;
-                    bytesRead = buf.length;
-                }
-                else if(str.length > 4)
-                {
-                    str.length = 4;
-                }
-
-                buf = cast(ubyte[])str;
-                if(str.length < 4)
-                {
-                    buf.length = 4;
-                    _con.read(buf[str.length..$]);
-                }
-                
-                buffer.put(buf);
-
-                debug writefln("IN: %(%.02x %)", str);
-            }
-
-            return FixedHeader(buf[0]);
-        }
 
         version(MqttDebug) logDebug("MQTT Entering listening loop");
-        
-        while(_con.connected)
+
+        while (_con.connected)
         {
-            try
+            auto size = _con.leastSize;
+            if (size > 0)
             {
-                auto header = readFixedHeader();
-            }
-            catch(Exception err)
-            {
-                logError(err.toString);
+                ubyte[] data = new ubyte[](size);
                 
-                break;
+                _con.read(data);
+                proccessData(data);
             }
-
-            sleep(dur!"msecs"(10));
-
-            buffer.clear();
         }
 
         version(MqttDebug) logDebug("MQTT Exiting listening loop");
+    }
+
+    void send(T)(auto ref T msg)
+    {
+        _sendBuffer.clear(); // clear to write new
+        _sendBuffer.serialize(msg);
+        
+        if (_con.connected)
+        {
+            version(MqttDebug) logDebug("MQTT OUT: %(%.02x %)", _sendBuffer.data);
+            _con.write(_sendBuffer.data);
+        }
+    }
+
+    @property ushort nextPacketId()
+    {
+        //TODO: handle it properly
+        return ++_packetId;
     }
 }
 
