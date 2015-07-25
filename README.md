@@ -1,8 +1,6 @@
 vibe-mqtt
 =========
 
-[![Build Status](https://travis-ci.org/chalucha/vibe-mqtt.svg?branch=master)](https://travis-ci.org/chalucha/vibe-mqtt)
-
 # Description
 [MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written in D.
 
@@ -11,6 +9,8 @@ MQTT protocol version supported: 3.1.1
 Depends on: [vibe.d](https://github.com/rejectedsoftware/vibe.d)
 
 Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
+
+[![Build Status](https://travis-ci.org/chalucha/vibe-mqtt.svg?branch=master)](https://travis-ci.org/chalucha/vibe-mqtt)
 
 # Usage
 
