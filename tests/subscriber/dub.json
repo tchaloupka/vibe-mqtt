@@ -4,7 +4,7 @@
     "copyright": "Copyright © 2015, Tomáš Chaloupka",
     "authors": ["Tomáš Chaloupka"],
     "dependencies": {
-		"mqtt-d": {"version": "~master", "path": "../../"}
-	},
+        "vibe-mqtt": {"version": "~master", "path": "../../"}
+    },
     "versions": ["VibeDefaultMain", "MqttDebug"]
 }

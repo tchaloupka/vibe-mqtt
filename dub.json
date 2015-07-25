@@ -1,6 +1,6 @@
 {
-    "name": "mqtt-d",
-    "description": "A MQTT client for D",
+    "name": "vibe-mqtt",
+    "description": "A MQTT broker client for D",
     "copyright": "Copyright © 2015, Tomáš Chaloupka",
     "authors": ["Tomáš Chaloupka"],
     "targetType": "library",
