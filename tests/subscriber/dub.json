@@ -1,0 +1,10 @@
+{
+    "name": "subscriber",
+    "description": "A simple MQTT subscriber",
+    "copyright": "Copyright © 2015, Tomáš Chaloupka",
+    "authors": ["Tomáš Chaloupka"],
+    "dependencies": {
+		"mqtt-d": {"version": "~master", "path": "../../"}
+	},
+    "versions": ["VibeDefaultMain", "MqttDebug"]
+}

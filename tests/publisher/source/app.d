@@ -15,6 +15,7 @@ shared static this()
     setLogFormat(FileLogger.Format.threadTime);
 
     auto settings = Settings();
+    settings.clientId = "test publisher";
 
     auto mqtt = new MqttClient(settings);
     mqtt.connect();

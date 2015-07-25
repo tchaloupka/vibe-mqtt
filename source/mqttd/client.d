@@ -125,11 +125,11 @@ class MqttClient
     /**
      * Publishes the message on the specified topic
      *  
-     *  Params:
-     *      topic = Topic to send message to
-     *      payload = Content of the message
-     *      qos = Required QoSLevel to handle message (default is QoSLevel.AtMostOnce)
-     *      retain = If true, the server must store the message so that it can be delivered to future subscribers
+     * Params:
+     *     topic = Topic to send message to
+     *     payload = Content of the message
+     *     qos = Required QoSLevel to handle message (default is QoSLevel.AtMostOnce)
+     *     retain = If true, the server must store the message so that it can be delivered to future subscribers
      *
      */
     final void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.AtMostOnce, bool retain = false)
@@ -144,6 +144,26 @@ class MqttClient
             pub.packetId = nextPacketId();
 
         send(pub);
+    }
+
+    /**
+     * Subscribes to the specified topics
+     * 
+     * Params:
+     *      topics = Array of topic filters to subscribe to
+     *      qos = This gives the maximum QoS level at which the Server can send Application Messages to the Client.
+     * 
+     */
+    final void subscribe(string[] topics, QoSLevel qos = QoSLevel.AtMostOnce)
+    {
+        import std.algorithm : map;
+        import std.array : array;
+
+        auto sub = Subscribe();
+        sub.packetId = nextPacketId();
+        sub.topics = topics.map!(a => Topic(a, qos)).array;
+
+        send(sub);
     }
 
     void onConnAck(ConnAck packet)
