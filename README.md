@@ -34,7 +34,7 @@ auto publisher = runTask(() {
 ```
 
 ## Subscriber
-Simple subscriber which connects to the mQTT broker, subscribes to the topic and outputs each received message.
+Simple subscriber which connects to the MQTT broker, subscribes to the topic and outputs each received message.
 Implicitly it connects to 127.0.0.1:1883
 
 ```D
