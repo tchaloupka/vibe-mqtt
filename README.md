@@ -10,7 +10,7 @@ Depends on: [vibe.d](https://github.com/rejectedsoftware/vibe.d)
 Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
 
 ###Things to work on
-####Wait for ConnAck
+####Wait for ConnAck on Connect
 If ConnAck is not received after sending Connect packet, client has to disconnect itself.
 Clients typically wait for a CONNACK Packet, However, if the Client exploits its freedom to send Control Packets before it receives a CONNACK, it might simplify the Client implementation as it does not have to police the connected state. The Client accepts that any data that it sends before it receives a CONNACK packet from the Server will not be processed if the Server rejects the connection.
 Clients need not wait for a CONNACK Packet to arrive from the Server.
