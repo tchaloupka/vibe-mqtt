@@ -10,18 +10,21 @@ Depends on: [vibe.d](https://github.com/rejectedsoftware/vibe.d)
 
 Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
 
-# Code organization
-# source/mqttd
+# Usage
 
-# Tests
+Example code can be found in the `example` directory.
+
 ## Publisher
-Simple publisher to test with
+Simple publisher which connects to the MQTT broker and periodically sends a message.
+
 ## Subscriber
-Simple subscriber to test with
+Simple subscriber which connects to the mQTT broker, subscribes to the topic and outputs each received message.
+
 ## Serialization
 Simple benchmark for MQTT messages serialization/deserialization with comparison to [msgpack-d](https://github.com/msgpack/msgpack-d)
 
 # Backlog items (pull requests are welcome)
+
 ## Wait for ConnAck on Connect
 If ConnAck is not received after sending Connect packet, client has to disconnect itself.
 Clients typically wait for a CONNACK Packet, However, if the Client exploits its freedom to send Control Packets before it receives a CONNACK, it might simplify the Client implementation as it does not have to police the connected state. The Client accepts that any data that it sends before it receives a CONNACK packet from the Server will not be processed if the Server rejects the connection.
