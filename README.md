@@ -132,3 +132,4 @@ Add possibility to connect with Clean Session flag on/off.
 Allow automatic reconnections with broker if it disconnects due to network problems.
 
 ## Communication over TLS channel
+Enable secure communication with TLS enabled broker.
