@@ -78,18 +78,57 @@ Each time a Client sends a new packet (which has packetId) it MUST assign it a c
 Add possibility to automatically send PingReq and handle delivery (or not) of PingResp to check connection state.
 
 ## QoS level support above 0
-As in [Quality of Service levels and protocol flows](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718099) in the specification.
+Specs - [Quality of Service levels and protocol flows](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718099)
 
 MQTT delivers Application Messages according to the Quality of Service (QoS) levels. The delivery protocol is symmetric, in the description below the Client can take the role of either Sender or Receiver. The delivery protocol is concerned solely with the delivery of an application message from a single Sender to a single Receiver. When the Server is delivering an Application Message to more than one Client, each Client is treated independently. The QoS level used to deliver an Application Message outbound to the Client could differ from that of the inbound Application Message.
 
+### QoS 0 **[DONE]**
+The message is delivered according to the capabilities of the underlying network. No response is sent by the receiver and no retry is performed by the sender. The message arrives at the receiver either once or not at all.
 
+### QoS 1
+This quality of service ensures that the message arrives at the receiver at least once. A QoS 1 PUBLISH Packet has a Packet Identifier in its variable header and is acknowledged by a PUBACK Packet.
+
+#### Sender
+- MUST assign an unused Packet Identifier each time it has a new Application Message to publish.
+- MUST send a PUBLISH Packet containing this Packet Identifier with QoS=1, DUP=0.
+- MUST treat the PUBLISH Packet as “unacknowledged” until it has received the corresponding PUBACK packet from the receiver.
+
+#### Receiver
+- MUST respond with a PUBACK Packet containing the Packet Identifier from the incoming PUBLISH Packet, having accepted ownership of the Application Message
+- After it has sent a PUBACK Packet the Receiver MUST treat any incoming PUBLISH packet that contains the same Packet Identifier as being a new publication, irrespective of the setting of its DUP flag.
+
+### QoS 2
+This is the highest quality of service, for use when neither loss nor duplication of messages are acceptable. There is an increased overhead associated with this quality of service.
+
+A QoS 2 message has a Packet Identifier in its variable header. The receiver of a QoS 2 PUBLISH Packet acknowledges receipt with a two-step acknowledgement process.
+
+#### Sender
+- MUST assign an unused Packet Identifier when it has a new Application Message to publish.
+- MUST send a PUBLISH packet containing this Packet Identifier with QoS=2, DUP=0.
+- MUST treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
+- MUST send a PUBREL packet when it receives a PUBREC packet from the receiver. This PUBREL packet MUST contain the same Packet Identifier as the original PUBLISH packet.
+- MUST treat the PUBREL packet as “unacknowledged” until it has received the corresponding PUBCOMP packet from the receiver.
+- MUST NOT re-send the PUBLISH once it has sent the corresponding PUBREL packet.
+
+#### Receiver
+- MUST respond with a PUBREC containing the Packet Identifier from the incoming PUBLISH Packet, having accepted ownership of the Application Message.
+- Until it has received the corresponding PUBREL packet, the Receiver MUST acknowledge any subsequent PUBLISH packet with the same Packet Identifier by sending a PUBREC. It MUST NOT cause duplicate messages to be delivered to any onward recipients in this case.
+- MUST respond to a PUBREL packet by sending a PUBCOMP packet containing the same Packet Identifier as the PUBREL.
+- After it has sent a PUBCOMP, the receiver MUST treat any subsequent PUBLISH packet that contains that Packet Identifier as being a new publication.
+
+## Message delivery retry
+Specs - [Message delivery retry](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718103), [Message ordering](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718105)
+
+When a Client reconnects with CleanSession set to 0, both the Client and Server MUST re-send any unacknowledged PUBLISH Packets (where QoS > 0) and PUBREL Packets using their original Packet Identifiers. This is the only circumstance where a Client or Server is REQUIRED to redeliver messages.
 
 ## Maintain client session state
-As in [Storing state](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718096) in the specification.
+Specs - [Storing state](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718096)
 
 It is necessary for the Client Session state in order to provide Quality of Service guarantees. The Client MUST store Session state for the entire duration of the Session. A Session MUST last at least as long it has an active Network Connection.
 
 Add possibility to connect with Clean Session flag on/off.
 
-##Autoreconnect to broker
+## Autoreconnect to broker
 Allow automatic reconnections with broker if it disconnects due to network problems.
+
+## Communication over TLS channel
