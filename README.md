@@ -1,8 +1,8 @@
-mqtt-d
-=============
+vibe-mqtt
+=========
 
 # Description
-[MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) client library written in D.
+[MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written in D.
 
 MQTT protocol version supported: 3.1.1
 
