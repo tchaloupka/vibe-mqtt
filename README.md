@@ -12,13 +12,54 @@ Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq
 
 # Usage
 
-Example code can be found in the `example` directory.
+Example code can be found in the `tests` directory.
 
 ## Publisher
 Simple publisher which connects to the MQTT broker and periodically sends a message.
+Implicitly it connects to 127.0.0.1:1883
+
+```D
+auto settings = Settings();
+settings.clientId = "test publisher";
+
+auto mqtt = new MqttClient(settings);
+mqtt.connect();
+
+auto publisher = runTask(() {
+        while (mqtt.connected) {
+            mqtt.publish("chat", "I'm still here!!!");
+            sleep(2.seconds());
+        }
+    });
+```
 
 ## Subscriber
 Simple subscriber which connects to the mQTT broker, subscribes to the topic and outputs each received message.
+Implicitly it connects to 127.0.0.1:1883
+
+```D
+class Subscriber : MqttClient {
+    this(Settings settings) {
+        super(settings);
+    }
+
+    override void onPublish(Publish packet) {
+        super.onPublish(packet);
+        writeln("chat: ", cast(string)packet.payload);
+    }
+
+    override void onConnAck(ConnAck packet) {
+        super.onConnAck(packet);
+        this.subscribe(["chat"]);
+    }
+}
+
+auto settings = Settings();
+settings.clientId = "test subscriber";
+
+auto mqtt = new Subscriber(settings);
+mqtt.connect();
+```
 
 ## Serialization
 Simple benchmark for MQTT messages serialization/deserialization with comparison to [msgpack-d](https://github.com/msgpack/msgpack-d)
