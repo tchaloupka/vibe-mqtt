@@ -42,13 +42,14 @@ import std.exception;
 import std.string : format;
 import std.traits;
 
+/// MqttClient settings
 struct Settings
 {
-    string host = "127.0.0.1";
-    ushort port = 1883u;
-    string clientId = "vibe-d.mqtt";
-    string userName = null;
-    string password = null;
+    string host = "127.0.0.1"; /// message broker address
+    ushort port = 1883u; /// message broker port
+    string clientId = "vibe-d.mqtt"; /// Client Id to identify within message broker (must be unique)
+    string userName = null; /// optional user name to login with
+    string password = null; /// user password
 }
 
 class MqttClient
