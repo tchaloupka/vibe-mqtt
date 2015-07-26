@@ -48,6 +48,9 @@ import std.traits;
 
 enum MQTT_BROKER_DEFAULT_PORT = 1883u;
 enum MQTT_BROKER_DEFAULT_SSL_PORT = 8883u;
+enum MQTT_SESSION_MAX_PACKETS = ushort.max;
+
+alias SessionContainer = FixedRingBuffer!(PacketContext, MQTT_SESSION_MAX_PACKETS);
 
 /// MqttClient settings
 struct Settings
@@ -57,13 +60,6 @@ struct Settings
     string clientId = "vibe-d.mqtt"; /// Client Id to identify within message broker (must be unique)
     string userName = null; /// optional user name to login with
     string password = null; /// user password
-}
-
-/// Flow of the packet
-enum PacketFlow
-{
-    toPublish, /// To publish to subscribers
-    toAcknowledge /// To acknowledge to publisher
 }
 
 /// MQTT packet state
@@ -78,7 +74,8 @@ enum PacketState
     sendPubcomp, /// QOS = 2, end second phase handshake send PUBCOMP
     sendPuback, /// QOS = 1, PUBLISH received, send PUBACK
     waitForSuback, /// (QOS = 1), SUBSCRIBE sent, wait for SUBACK
-    waitForUnsuback /// (QOS = 1), UNSUBSCRIBE sent, wait for UNSUBACK
+    waitForUnsuback, /// (QOS = 1), UNSUBSCRIBE sent, wait for UNSUBACK
+    any /// for search purposes
 }
 
 /// Context for MQTT packet stored in Session
@@ -86,7 +83,6 @@ struct PacketContext
 {
     PacketType packetType; /// MQTT packet content
     PacketState state; /// MQTT packet state
-    PacketFlow flow; /// Flow of the packet
     public SysTime timestamp; /// Timestamp (for retry)
     public uint attempt; /// Attempt (for retry)
     /// MQTT packet id
@@ -117,7 +113,6 @@ struct PacketContext
     {
         this.packetType = ctx.packetType;
         this.state = ctx.state;
-        this.flow = ctx.flow;
         this.timestamp = ctx.timestamp;
         this.attempt = ctx.attempt;
 
@@ -161,14 +156,52 @@ struct PacketContext
 /// MQTT session status holder
 struct Session
 {
-    /// Packets to handle
-    FixedRingBuffer!PacketContext messages;
+    /// Adds packet to Session
+    void add(T)(auto ref T packet, PacketState state) 
+        if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
+    {
+        auto ctx = PacketContext();
+        ctx = packet;
+        ctx.timestamp = Clock.currTime;
+
+        if(_packets.capacity == 0)
+            _packets.popBack(); // make place by oldest one removal
+
+        _packets.put(ctx);
+    }
+
+    /// Finds package context stored in session
+    bool canFind(ushort packetId, out PacketContext ctx, PacketState state = PacketState.any)
+    {
+        foreach(ref c; _packets)
+        {
+            if(c.packetId == packetId && (state == PacketState.any || c.state == state))
+            {
+                ctx = c;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+@safe @nogc pure nothrow:
 
     /// Clears cached messages
     void clear()
     {
-        messages.clear();
+        _packets.clear();
     }
+
+    /// Number of packets to process
+    @property size_t packetCount() const
+    {
+        return _packets.length;
+    }
+
+private:
+    /// Packets to handle
+    SessionContainer _packets;
 }
 
 /// MQTT Client implementation
@@ -481,3 +514,26 @@ final:
     }
 }
 
+unittest
+{
+    Session s;
+
+    auto pub = Publish();
+    pub.packetId = 0xabcd;
+    s.add(pub, PacketState.waitForPuback);
+
+    assert(s.packetCount == 1);
+
+    PacketContext ctx;
+    assert(s.canFind(0xabcd, ctx));
+    assert(s.packetCount == 1);
+
+    assert(ctx.packetType == PacketType.PUBLISH);
+    assert(ctx.state == PacketState.waitForPuback);
+    assert(ctx.attempt == 0);
+    assert(ctx.publish != Publish.init);
+    assert(ctx.timestamp != SysTime.init);
+
+    s.clear();
+    assert(s.packetCount == 0);
+}
