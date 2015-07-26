@@ -76,24 +76,9 @@ Each time a Client sends a new packet (which has packetId) it MUST assign it a c
 ## PingReq and PingResp handling
 Add possibility to automatically send PingReq and handle delivery (or not) of PingResp to check connection state.
 
-## QoS level support above 0
+## QoS 2 level support
 Specs - [Quality of Service levels and protocol flows](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718099)
 
-MQTT delivers Application Messages according to the Quality of Service (QoS) levels. The delivery protocol is symmetric, in the description below the Client can take the role of either Sender or Receiver. The delivery protocol is concerned solely with the delivery of an application message from a single Sender to a single Receiver. When the Server is delivering an Application Message to more than one Client, each Client is treated independently. The QoS level used to deliver an Application Message outbound to the Client could differ from that of the inbound Application Message.
-
-### QoS 1
-This quality of service ensures that the message arrives at the receiver at least once. A QoS 1 PUBLISH Packet has a Packet Identifier in its variable header and is acknowledged by a PUBACK Packet.
-
-#### Sender
-- **[DONE]** MUST assign an unused Packet Identifier each time it has a new Application Message to publish.
-- **[DONE]**MUST send a PUBLISH Packet containing this Packet Identifier with QoS=1, DUP=0.
-- MUST treat the PUBLISH Packet as “unacknowledged” until it has received the corresponding PUBACK packet from the receiver.
-
-#### Receiver
-- **[DONE]** MUST respond with a PUBACK Packet containing the Packet Identifier from the incoming PUBLISH Packet, having accepted ownership of the Application Message
-- **[DONE]** After it has sent a PUBACK Packet the Receiver MUST treat any incoming PUBLISH packet that contains the same Packet Identifier as being a new publication, irrespective of the setting of its DUP flag.
-
-### QoS 2
 This is the highest quality of service, for use when neither loss nor duplication of messages are acceptable. There is an increased overhead associated with this quality of service.
 
 A QoS 2 message has a Packet Identifier in its variable header. The receiver of a QoS 2 PUBLISH Packet acknowledges receipt with a two-step acknowledgement process.
@@ -129,3 +114,8 @@ Allow automatic reconnections with broker if it disconnects due to network probl
 
 ## Communication over TLS channel
 Enable secure communication with TLS enabled broker.
+
+## Validation of topics
+Specs - [Topic Names](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718106)
+
+Validate topics within subscribe packet.
