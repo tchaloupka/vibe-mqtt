@@ -31,6 +31,7 @@ module mqttd.client;
 
 debug import std.stdio;
 
+import mqttd.traits;
 import mqttd.messages;
 import mqttd.serialization;
 
@@ -80,22 +81,88 @@ enum PacketState
     waitForUnsuback /// (QOS = 1), UNSUBSCRIBE sent, wait for UNSUBACK
 }
 
-/// Context for MQTT packet
-struct MqttPacketContext
+/// Context for MQTT packet stored in Session
+struct PacketContext
 {
-    ubyte[] packet; /// MQTT packet content
-    ushort packetId; /// MQTT packet id
+    PacketType packetType; /// MQTT packet content
     PacketState state; /// MQTT packet state
     PacketFlow flow; /// Flow of the packet
     public SysTime timestamp; /// Timestamp (for retry)
     public uint attempt; /// Attempt (for retry)
+    /// MQTT packet id
+    @property ushort packetId()
+    {
+        switch (packetType)
+        {
+            case PacketType.PUBLISH:
+                return publish.packetId;
+            case PacketType.SUBSCRIBE:
+                return subscribe.packetId;
+            case PacketType.UNSUBSCRIBE:
+                return unsubscribe.packetId;
+            default:
+                assert(0, "Unsupported packet type");
+        }
+    }
+
+    /// Context can hold different packet types
+    union
+    {
+        Publish publish; /// Publish packet
+        Subscribe subscribe; /// Subscribe packet
+        Unsubscribe unsubscribe; /// Unsubscribe packet
+    }
+
+    ref PacketContext opAssign(ref PacketContext ctx)
+    {
+        this.packetType = ctx.packetType;
+        this.state = ctx.state;
+        this.flow = ctx.flow;
+        this.timestamp = ctx.timestamp;
+        this.attempt = ctx.attempt;
+
+        switch (packetType)
+        {
+            case PacketType.PUBLISH:
+                this.publish = ctx.publish;
+                break;
+            case PacketType.SUBSCRIBE:
+                this.subscribe = ctx.subscribe;
+                break;
+            case PacketType.UNSUBSCRIBE:
+                this.unsubscribe = ctx.unsubscribe;
+                break;
+            default:
+                assert(0, "Unsupported packet type");
+        }
+
+        return this;
+    }
+
+    void opAssign(Publish pub)
+    {
+        this.packetType = PacketType.PUBLISH;
+        this.publish = pub;
+    }
+
+    void opAssign(Subscribe sub)
+    {
+        this.packetType = PacketType.SUBSCRIBE;
+        this.subscribe = sub;
+    }
+
+    void opAssign(Unsubscribe unsub)
+    {
+        this.packetType = PacketType.UNSUBSCRIBE;
+        this.unsubscribe = unsub;
+    }
 }
 
 /// MQTT session status holder
 struct Session
 {
     /// Packets to handle
-    FixedRingBuffer!MqttPacketContext messages;
+    FixedRingBuffer!PacketContext messages;
 
     /// Clears cached messages
     void clear()
@@ -286,6 +353,7 @@ class MqttClient
 private:
     Settings _settings;
     TCPConnection _con;
+    Session _session;
     Task _listener;
     Serializer!(Appender!(ubyte[])) _sendBuffer;
     FixedRingBuffer!ubyte _readBuffer;
@@ -391,7 +459,7 @@ final:
         version(MqttDebug) logDebug("MQTT Exiting listening loop");
     }
 
-    void send(T)(auto ref T msg)
+    void send(T)(auto ref T msg) if (isMqttPacket!T)
     {
         _sendBuffer.clear(); // clear to write new
         _sendBuffer.serialize(msg);
