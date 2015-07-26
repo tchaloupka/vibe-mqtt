@@ -14,7 +14,7 @@ Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq
 
 # Usage
 
-Example code can be found in the `tests` directory.
+Example code can be found in the `examples` directory.
 
 ## Publisher
 Simple publisher which connects to the MQTT broker and periodically sends a message.
@@ -62,9 +62,6 @@ settings.clientId = "test subscriber";
 auto mqtt = new Subscriber(settings);
 mqtt.connect();
 ```
-
-## Serialization
-Simple benchmark for MQTT messages serialization/deserialization with comparison to [msgpack-d](https://github.com/msgpack/msgpack-d)
 
 # Backlog items (pull requests are welcome)
 
