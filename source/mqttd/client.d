@@ -59,14 +59,14 @@ struct Settings
 }
 
 /// Flow of the packet
-enum MqttPacketFlow
+enum PacketFlow
 {
     toPublish, /// To publish to subscribers
     toAcknowledge /// To acknowledge to publisher
 }
 
 /// MQTT packet state
-enum MqttPacketState
+enum PacketState
 {
     waitForPuback, /// QOS = 1, PUBLISH sent, wait for PUBACK
     waitForPubrec, /// QOS = 2, PUBLISH sent, wait for PUBREC
@@ -85,8 +85,8 @@ struct MqttPacketContext
 {
     ubyte[] packet; /// MQTT packet content
     ushort packetId; /// MQTT packet id
-    MqttPacketState state; /// MQTT packet state
-    MqttPacketFlow flow; /// Flow of the packet
+    PacketState state; /// MQTT packet state
+    PacketFlow flow; /// Flow of the packet
     public SysTime timestamp; /// Timestamp (for retry)
     public uint attempt; /// Attempt (for retry)
 }
@@ -121,103 +121,106 @@ class MqttClient
         _readBuffer.capacity = 4 * 1024;
     }
 
-    /// Connects to the specified broker and sends it the Connect packet
-    final void connect()
-    in { assert(_con is null ? true : !_con.connected); }
-    body
+    final
     {
-        import vibe.core.net: connectTCP;
-        import vibe.core.core: runTask;
-
-        _con = connectTCP(_settings.host, _settings.port);
-        _listener = runTask(&listener);
-
-        version(MqttDebug) logDebug("MQTT Broker Connecting");
-
-        auto con = Connect();
-        con.clientIdentifier = _settings.clientId;
-        con.flags.cleanSession = true;
-        if (_settings.userName.length > 0)
+        /// Connects to the specified broker and sends it the Connect packet
+        void connect()
+        in { assert(_con is null ? true : !_con.connected); }
+        body
         {
-            con.flags.userName = true;
-            con.userName = "user";
-            if (_settings.password.length > 0)
+            import vibe.core.net: connectTCP;
+            import vibe.core.core: runTask;
+
+            _con = connectTCP(_settings.host, _settings.port);
+            _listener = runTask(&listener);
+
+            version(MqttDebug) logDebug("MQTT Broker Connecting");
+
+            auto con = Connect();
+            con.clientIdentifier = _settings.clientId;
+            con.flags.cleanSession = true;
+            if (_settings.userName.length > 0)
             {
-                con.flags.password = true;
-                con.password = "user";
+                con.flags.userName = true;
+                con.userName = "user";
+                if (_settings.password.length > 0)
+                {
+                    con.flags.password = true;
+                    con.password = "user";
+                }
+            }
+
+            send(con);
+        }
+
+        /// Sends Disconnect packet to the broker and closes the underlying connection
+        void disconnect()
+        in { assert(!(_con is null)); }
+        body
+        {
+            version(MqttDebug) logDebug("MQTT Disconnectng from Broker");
+
+            if (_con.connected)
+            {
+                if(Task.getThis !is _listener)
+                    _listener.join;
+
+                send(Disconnect());
+                _con.flush();
+                _con.close();
             }
         }
 
-        send(con);
-    }
-
-    /// Sends Disconnect packet to the broker and closes the underlying connection
-    final void disconnect()
-    in { assert(!(_con is null)); }
-    body
-    {
-        version(MqttDebug) logDebug("MQTT Disconnectng from Broker");
-
-        if (_con.connected)
+        @property bool connected() const
+        in { assert(!(_con is null)); }
+        body
         {
-            if(Task.getThis !is _listener)
-                _listener.join;
-
-            send(Disconnect());
-            _con.flush();
-            _con.close();
+            return _con.connected;
         }
-    }
 
-    final @property bool connected() const
-    in { assert(!(_con is null)); }
-    body
-    {
-        return _con.connected;
-    }
+        /**
+         * Publishes the message on the specified topic
+         *  
+         * Params:
+         *     topic = Topic to send message to
+         *     payload = Content of the message
+         *     qos = Required QoSLevel to handle message (default is QoSLevel.AtMostOnce)
+         *     retain = If true, the server must store the message so that it can be delivered to future subscribers
+         *
+         */
+        void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.AtMostOnce, bool retain = false)
+            if (isSomeString!T || (isArray!T && is(ForeachType!T : ubyte)))
+        {
+            auto pub = Publish();
+            pub.header.qos = qos;
+            pub.header.retain = retain;
+            pub.topic = topic;
+            pub.payload = cast(ubyte[]) payload;
+            if (qos == QoSLevel.AtLeastOnce || qos == QoSLevel.ExactlyOnce)
+                pub.packetId = nextPacketId();
 
-    /**
-     * Publishes the message on the specified topic
-     *  
-     * Params:
-     *     topic = Topic to send message to
-     *     payload = Content of the message
-     *     qos = Required QoSLevel to handle message (default is QoSLevel.AtMostOnce)
-     *     retain = If true, the server must store the message so that it can be delivered to future subscribers
-     *
-     */
-    final void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.AtMostOnce, bool retain = false)
-        if (isSomeString!T || (isArray!T && is(ForeachType!T : ubyte)))
-    {
-        auto pub = Publish();
-        pub.header.qos = qos;
-        pub.header.retain = retain;
-        pub.topic = topic;
-        pub.payload = cast(ubyte[]) payload;
-        if (qos == QoSLevel.AtLeastOnce || qos == QoSLevel.ExactlyOnce)
-            pub.packetId = nextPacketId();
+            send(pub);
+        }
 
-        send(pub);
-    }
+        /**
+         * Subscribes to the specified topics
+         * 
+         * Params:
+         *      topics = Array of topic filters to subscribe to
+         *      qos = This gives the maximum QoS level at which the Server can send Application Messages to the Client.
+         * 
+         */
+        void subscribe(string[] topics, QoSLevel qos = QoSLevel.AtMostOnce)
+        {
+            import std.algorithm : map;
+            import std.array : array;
 
-    /**
-     * Subscribes to the specified topics
-     * 
-     * Params:
-     *      topics = Array of topic filters to subscribe to
-     *      qos = This gives the maximum QoS level at which the Server can send Application Messages to the Client.
-     * 
-     */
-    final void subscribe(string[] topics, QoSLevel qos = QoSLevel.AtMostOnce)
-    {
-        import std.algorithm : map;
-        import std.array : array;
+            auto sub = Subscribe();
+            sub.packetId = nextPacketId();
+            sub.topics = topics.map!(a => Topic(a, qos)).array;
 
-        auto sub = Subscribe();
-        sub.packetId = nextPacketId();
-        sub.topics = topics.map!(a => Topic(a, qos)).array;
-
-        send(sub);
+            send(sub);
+        }
     }
 
     void onConnAck(ConnAck packet)
