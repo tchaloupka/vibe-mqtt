@@ -97,17 +97,17 @@ A QoS 2 message has a Packet Identifier in its variable header. The receiver of 
 - MUST respond to a PUBREL packet by sending a PUBCOMP packet containing the same Packet Identifier as the PUBREL.
 - After it has sent a PUBCOMP, the receiver MUST treat any subsequent PUBLISH packet that contains that Packet Identifier as being a new publication.
 
-## Message delivery retry
-Specs - [Message delivery retry](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718103), [Message ordering](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718105)
-
-When a Client reconnects with CleanSession set to 0, both the Client and Server MUST re-send any unacknowledged PUBLISH Packets (where QoS > 0) and PUBREL Packets using their original Packet Identifiers. This is the only circumstance where a Client or Server is REQUIRED to redeliver messages.
-
-## Maintain client session state
+## Maintain client session state [PARTIAL]
 Specs - [Storing state](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718096)
 
 It is necessary for the Client Session state in order to provide Quality of Service guarantees. The Client MUST store Session state for the entire duration of the Session. A Session MUST last at least as long it has an active Network Connection.
 
 Add possibility to connect with Clean Session flag on/off.
+
+## Message delivery retry
+Specs - [Message delivery retry](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718103), [Message ordering](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718105)
+
+When a Client reconnects with CleanSession set to 0, both the Client and Server MUST re-send any unacknowledged PUBLISH Packets (where QoS > 0) and PUBREL Packets using their original Packet Identifiers. This is the only circumstance where a Client or Server is REQUIRED to redeliver messages.
 
 ## Autoreconnect to broker
 Allow automatic reconnections with broker if it disconnects due to network problems.
