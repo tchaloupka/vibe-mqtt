@@ -23,14 +23,14 @@ shared static this()
         {
             super.onPublish(packet);
 
-            writeln("chat: ", cast(string)packet.payload);
+            writeln(packet.topic, ": ", cast(string)packet.payload);
         }
 
         override void onConnAck(ConnAck packet)
         {
             super.onConnAck(packet);
 
-            this.subscribe(["chat"]);
+            this.subscribe(["chat/#"]);
         }
     }
 
