@@ -33,10 +33,13 @@ debug import std.stdio;
 
 import mqttd.messages;
 import mqttd.serialization;
+
 import vibe.core.log;
 import vibe.core.net: TCPConnection;
 import vibe.core.stream;
 import vibe.core.task;
+import vibe.utils.array : FixedRingBuffer;
+
 import std.datetime;
 import std.exception;
 import std.string : format;
@@ -55,11 +58,56 @@ struct Settings
     string password = null; /// user password
 }
 
+/// Flow of the packet
+enum MqttPacketFlow
+{
+    toPublish, /// To publish to subscribers
+    toAcknowledge /// To acknowledge to publisher
+}
+
+/// MQTT packet state
+enum MqttPacketState
+{
+    waitForPuback, /// QOS = 1, PUBLISH sent, wait for PUBACK
+    waitForPubrec, /// QOS = 2, PUBLISH sent, wait for PUBREC
+    waitForPubrel, /// QOS = 2, PUBREC sent, wait for PUBREL
+    waitForPubcomp, /// QOS = 2, PUBREL sent, wait for PUBCOMP
+    sendPubrec, /// QOS = 2, start first phase handshake send PUBREC
+    sendPubrel, /// QOS = 2, start second phase handshake send PUBREL
+    sendPubcomp, /// QOS = 2, end second phase handshake send PUBCOMP
+    sendPuback, /// QOS = 1, PUBLISH received, send PUBACK
+    waitForSuback, /// (QOS = 1), SUBSCRIBE sent, wait for SUBACK
+    waitForUnsuback /// (QOS = 1), UNSUBSCRIBE sent, wait for UNSUBACK
+}
+
+/// Context for MQTT packet
+struct MqttPacketContext
+{
+    ubyte[] packet; /// MQTT packet content
+    ushort packetId; /// MQTT packet id
+    MqttPacketState state; /// MQTT packet state
+    MqttPacketFlow flow; /// Flow of the packet
+    public SysTime timestamp; /// Timestamp (for retry)
+    public uint attempt; /// Attempt (for retry)
+}
+
+/// MQTT session status holder
+struct Session
+{
+    /// Packets to handle
+    FixedRingBuffer!MqttPacketContext messages;
+
+    /// Clears cached messages
+    void clear()
+    {
+        messages.clear();
+    }
+}
+
 /// MQTT Client implementation
 class MqttClient
 {
     import std.array : Appender;
-    import vibe.utils.array : FixedRingBuffer;
 
     this(Settings settings)
     {
