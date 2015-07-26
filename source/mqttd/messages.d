@@ -99,13 +99,15 @@ enum PacketType : ubyte
 enum QoSLevel : ubyte
 {
     /// At most once delivery
-    AtMostOnce = 0x0,
+    QoS0 = 0x00,
     /// At least once delivery
-    AtLeastOnce = 0x1,
+    QoS1 = 0x01,
     /// Exactly once delivery
-    ExactlyOnce = 0x2,
+    QoS2 = 0x02,
     /// Reserved – must not be used
-    Reserved = 0x3
+    Reserved = 0x03,
+    /// Failure - used in SubAck packet only
+    Failure = 0x80
 }
 
 /// Connect Return code values - 0 = accepted, the rest means refused (6-255 are reserved)
@@ -123,19 +125,6 @@ enum ConnectReturnCode : ubyte
     UserNameOrPassword = 0x04,
     /// The Client is not authorized to connect
     NotAuthorized      = 0x05
-}
-
-/// Subscribe Return code values
-enum SubscribeReturnCode : ubyte
-{
-    /// Success - Maximum QoS 0
-    QoS0 = 0x00,
-    /// Success - Maximum QoS 1
-    QoS1 = 0x01,
-    /// Success - Maximum QoS 2
-    QoS2 = 0x02,
-    /// Failure
-    Failure = 0x80
 }
 
 /**
@@ -430,30 +419,30 @@ struct ConnectFlags
 
         ConnectFlags flags;
 
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, false));
         assert(flags == 0);
 
         flags = 1; //reserved - no change
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, false));
         assert(flags == 0);
 
         flags = 2;
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, false, true));
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, true));
 
         flags = 4;
-        assert(flags == ConnectFlags(false, false, false, QoSLevel.AtMostOnce, true, false));
+        assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, true, false));
 
         flags = 24;
         assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
 
         flags = 32;
-        assert(flags == ConnectFlags(false, false, true, QoSLevel.AtMostOnce, false, false));
+        assert(flags == ConnectFlags(false, false, true, QoSLevel.QoS0, false, false));
 
         flags = 64;
-        assert(flags == ConnectFlags(false, true, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == ConnectFlags(false, true, false, QoSLevel.QoS0, false, false));
 
         flags = 128;
-        assert(flags == ConnectFlags(true, false, false, QoSLevel.AtMostOnce, false, false));
+        assert(flags == ConnectFlags(true, false, false, QoSLevel.QoS0, false, false));
     }
 }
 
@@ -709,7 +698,7 @@ struct SubAck
      * SUBSCRIBE Packet being acknowledged. 
      * The order of return codes in the SUBACK Packet MUST match the order of Topic Filters in the SUBSCRIBE Packet.
      */
-    SubscribeReturnCode[] returnCodes;
+    QoSLevel[] returnCodes;
 }
 
 /// An UNSUBSCRIBE Packet is sent by the Client to the Server, to unsubscribe from topics.

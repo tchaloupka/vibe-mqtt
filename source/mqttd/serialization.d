@@ -316,7 +316,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
     else static if (is(T:ubyte)) return 1;
     else static if (is(T:ushort)) return 2;
     else static if (is(T:string)) return cast(uint)(2 + item.length);
-    else static if (is(T == SubscribeReturnCode[])) return cast(uint)item.length;
+    else static if (is(T == QoSLevel[])) return cast(uint)item.length;
     else static if (is(T == Topic)) return 3u + cast(uint)item.filter.length;
     else static if (isDynamicArray!T)
     {
@@ -360,7 +360,7 @@ void validate(T)(auto ref in T packet) pure
     
     static if (is(T == ConnectFlags))
     {
-        enforce(packet.will || (packet.willQoS == QoSLevel.AtMostOnce && !packet.willRetain), 
+        enforce(packet.will || (packet.willQoS == QoSLevel.QoS0 && !packet.willRetain), 
             "WillQoS and Will Retain MUST be 0 if Will flag is not set");
         enforce(packet.userName || !packet.password, "Password MUST be set to 0 if User flag is 0");
     }
@@ -417,7 +417,7 @@ mixin template processMembersTemplate(R, string fn)
             }
             else static if(is(T == Publish)) //special case for Publish packet
             {
-                static if (memberName == "packetId") if (item.header.qos == QoSLevel.AtMostOnce) continue;
+                static if (memberName == "packetId") if (item.header.qos == QoSLevel.QoS0) continue;
             }
 
             //debug writeln("processing ", memberName);

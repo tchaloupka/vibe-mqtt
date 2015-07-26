@@ -247,14 +247,15 @@ unittest
     ];
     
     auto pub = Publish();
-    pub.header.qos = QoSLevel.AtLeastOnce;
+    pub.header.qos = QoSLevel.QoS1;
     pub.header.retain = true;
     pub.packetId = 0xabcd;
     pub.topic = "/root/sec";
     pub.payload = [1, 2, 3, 4, 5];
     
     auto wr = appender!(ubyte[]).serialize(pub);
-    
+
+    // debug writefln("%(%.02x %)", wr.data);
     assert(wr.data.length == 20);
     
     assert(wr.data == data);
@@ -325,7 +326,7 @@ unittest
 
     auto sub = Subscribe();
     sub.packetId = 0xabcd;
-    sub.topics ~= Topic("/root/*", QoSLevel.ExactlyOnce);
+    sub.topics ~= Topic("/root/*", QoSLevel.QoS2);
     
     auto wr = appender!(ubyte[]);
     wr.serialize(sub);
@@ -350,10 +351,10 @@ unittest
 
     auto suback = SubAck();
     suback.packetId = 0xabcd;
-    suback.returnCodes ~= SubscribeReturnCode.QoS0;
-    suback.returnCodes ~= SubscribeReturnCode.QoS1;
-    suback.returnCodes ~= SubscribeReturnCode.QoS2;
-    suback.returnCodes ~= SubscribeReturnCode.Failure;
+    suback.returnCodes ~= QoSLevel.QoS0;
+    suback.returnCodes ~= QoSLevel.QoS1;
+    suback.returnCodes ~= QoSLevel.QoS2;
+    suback.returnCodes ~= QoSLevel.Failure;
     
     auto wr = appender!(ubyte[]);
     wr.serialize(suback);

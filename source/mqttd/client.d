@@ -170,16 +170,25 @@ struct Session
         _packets.put(ctx);
     }
 
-    /// Finds package context stored in session
-    bool canFind(ushort packetId, out PacketContext ctx, PacketState state = PacketState.any)
+    /// Removes the stored PacketContext
+    void removeAt(size_t idx)
     {
+        _packets.removeAt(_packets[idx..idx+1]);
+    }
+
+    /// Finds package context stored in session
+    bool canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
+    {
+        size_t i;
         foreach(ref c; _packets)
         {
             if(c.packetId == packetId && (state == PacketState.any || c.state == state))
             {
                 ctx = c;
+                idx = i;
                 return true;
             }
+            ++i;
         }
 
         return false;
@@ -299,6 +308,12 @@ class MqttClient
             if (qos == QoSLevel.AtLeastOnce || qos == QoSLevel.ExactlyOnce)
                 pub.packetId = nextPacketId();
 
+            if (qos == QoSLevel.AtLeastOnce) // QoS 1
+            {
+                //treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
+                _session.add(pub, PacketState.waitForPuback);
+            }
+
             send(pub);
         }
 
@@ -310,7 +325,7 @@ class MqttClient
          *      qos = This gives the maximum QoS level at which the Server can send Application Messages to the Client.
          * 
          */
-        void subscribe(string[] topics, QoSLevel qos = QoSLevel.AtMostOnce)
+        void subscribe(string[] topics, QoSLevel qos = QoSLevel.QoS0)
         {
             import std.algorithm : map;
             import std.array : array;
@@ -342,6 +357,14 @@ class MqttClient
     void onPubAck(PubAck packet)
     {
         version(MqttDebug) logDebug("MQTT onPubAck - %s", packet);
+
+        PacketContext ctx;
+        size_t idx;
+        if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPuback)) // QoS 1
+        {
+            //treat the PUBLISH Packet as “unacknowledged” until corresponding PUBACK received
+            _session.removeAt(idx);
+        }
     }
 
     void onPubRec(PubRec packet)
@@ -364,7 +387,7 @@ class MqttClient
         version(MqttDebug) logDebug("MQTT onPublish - %s", packet);
 
         //MUST respond with a PUBACK Packet containing the Packet Identifier from the incoming PUBLISH Packet
-        if (packet.header.qos == QoSLevel.AtLeastOnce)
+        if (packet.header.qos == QoSLevel.QoS1)
         {
             auto ack = PubAck();
             ack.packetId = packet.packetId;
@@ -525,7 +548,9 @@ unittest
     assert(s.packetCount == 1);
 
     PacketContext ctx;
-    assert(s.canFind(0xabcd, ctx));
+    size_t idx;
+    assert(s.canFind(0xabcd, ctx, idx));
+    assert(idx == 0);
     assert(s.packetCount == 1);
 
     assert(ctx.packetType == PacketType.PUBLISH);
@@ -534,6 +559,6 @@ unittest
     assert(ctx.publish != Publish.init);
     assert(ctx.timestamp != SysTime.init);
 
-    s.clear();
+    s.removeAt(idx);
     assert(s.packetCount == 0);
 }
