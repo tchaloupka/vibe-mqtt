@@ -1,0 +1,26 @@
+language: d
+
+d:
+  - dmd-2.068.0-b2
+  - dmd-2.067.1
+  - ldc-0.15.1
+  - gdc-4.9.2
+
+install:
+
+script:
+  - dub test --compiler=${DC}
+
+branches:
+  only:
+    - master
+
+notifications:
+  email: true
+
+sudo: false
+
+matrix:
+  exclude:
+    - d: ldc-0.15.1
+    - d: gdc-4.9.2

@@ -10,6 +10,8 @@ Depends on: [vibe.d](https://github.com/rejectedsoftware/vibe.d)
 
 Tested on: [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
 
+[![Build Status](https://travis-ci.org/chalucha/vibe-mqtt.svg?branch=master)](https://travis-ci.org/chalucha/vibe-mqtt)
+
 # Usage
 
 Example code can be found in the `tests` directory.
@@ -89,8 +91,8 @@ The message is delivered according to the capabilities of the underlying network
 This quality of service ensures that the message arrives at the receiver at least once. A QoS 1 PUBLISH Packet has a Packet Identifier in its variable header and is acknowledged by a PUBACK Packet.
 
 #### Sender
-- MUST assign an unused Packet Identifier each time it has a new Application Message to publish.
-- MUST send a PUBLISH Packet containing this Packet Identifier with QoS=1, DUP=0.
+- **[DONE]** MUST assign an unused Packet Identifier each time it has a new Application Message to publish.
+- **[DONE]**MUST send a PUBLISH Packet containing this Packet Identifier with QoS=1, DUP=0.
 - MUST treat the PUBLISH Packet as “unacknowledged” until it has received the corresponding PUBACK packet from the receiver.
 
 #### Receiver
@@ -103,8 +105,8 @@ This is the highest quality of service, for use when neither loss nor duplicatio
 A QoS 2 message has a Packet Identifier in its variable header. The receiver of a QoS 2 PUBLISH Packet acknowledges receipt with a two-step acknowledgement process.
 
 #### Sender
-- MUST assign an unused Packet Identifier when it has a new Application Message to publish.
-- MUST send a PUBLISH packet containing this Packet Identifier with QoS=2, DUP=0.
+- **[DONE]** MUST assign an unused Packet Identifier when it has a new Application Message to publish.
+- **[DONE]** MUST send a PUBLISH packet containing this Packet Identifier with QoS=2, DUP=0.
 - MUST treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
 - MUST send a PUBREL packet when it receives a PUBREC packet from the receiver. This PUBREL packet MUST contain the same Packet Identifier as the original PUBLISH packet.
 - MUST treat the PUBREL packet as “unacknowledged” until it has received the corresponding PUBCOMP packet from the receiver.
