@@ -259,6 +259,15 @@ class MqttClient
     void onPublish(Publish packet)
     {
         version(MqttDebug) logDebug("MQTT onPublish - %s", packet);
+
+        //MUST respond with a PUBACK Packet containing the Packet Identifier from the incoming PUBLISH Packet
+        if (packet.header.qos == QoSLevel.AtLeastOnce)
+        {
+            auto ack = PubAck();
+            ack.packetId = packet.packetId;
+
+            send(ack);
+        }
     }
 
     void onSubAck(SubAck packet)
