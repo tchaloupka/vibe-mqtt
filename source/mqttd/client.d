@@ -42,16 +42,20 @@ import std.exception;
 import std.string : format;
 import std.traits;
 
+enum MQTT_BROKER_DEFAULT_PORT = 1883u;
+enum MQTT_BROKER_DEFAULT_SSL_PORT = 8883u;
+
 /// MqttClient settings
 struct Settings
 {
     string host = "127.0.0.1"; /// message broker address
-    ushort port = 1883u; /// message broker port
+    ushort port = MQTT_BROKER_DEFAULT_PORT; /// message broker port
     string clientId = "vibe-d.mqtt"; /// Client Id to identify within message broker (must be unique)
     string userName = null; /// optional user name to login with
     string password = null; /// user password
 }
 
+/// MQTT Client implementation
 class MqttClient
 {
     import std.array : Appender;
@@ -84,6 +88,7 @@ class MqttClient
 
         auto con = Connect();
         con.clientIdentifier = _settings.clientId;
+        con.flags.cleanSession = true;
         if (_settings.userName.length > 0)
         {
             con.flags.userName = true;
@@ -338,10 +343,13 @@ final:
         }
     }
 
+    /// Gets next packet id
     @property ushort nextPacketId()
     {
-        //TODO: handle it properly
-        return ++_packetId;
+        //TODO: Is this ok or should we check with session packets?
+        //packet id can't be 0!
+        _packetId = cast(ushort)((_packetId % ushort.max) != 0 ? _packetId + 1 : 1);
+        return _packetId;
     }
 }
 
