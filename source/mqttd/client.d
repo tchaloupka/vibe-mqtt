@@ -297,7 +297,7 @@ class MqttClient
          *     retain = If true, the server must store the message so that it can be delivered to future subscribers
          *
          */
-        void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.AtMostOnce, bool retain = false)
+        void publish(T)(in string topic, in T payload, QoSLevel qos = QoSLevel.QoS0, bool retain = false)
             if (isSomeString!T || (isArray!T && is(ForeachType!T : ubyte)))
         {
             auto pub = Publish();
@@ -305,10 +305,10 @@ class MqttClient
             pub.header.retain = retain;
             pub.topic = topic;
             pub.payload = cast(ubyte[]) payload;
-            if (qos == QoSLevel.AtLeastOnce || qos == QoSLevel.ExactlyOnce)
+            if (qos == QoSLevel.QoS1 || qos == QoSLevel.QoS2)
                 pub.packetId = nextPacketId();
 
-            if (qos == QoSLevel.AtLeastOnce) // QoS 1
+            if (qos == QoSLevel.QoS1)
             {
                 //treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
                 _session.add(pub, PacketState.waitForPuback);
