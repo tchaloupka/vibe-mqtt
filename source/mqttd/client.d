@@ -502,7 +502,7 @@ final:
 
         while (_con.connected)
         {
-            auto size = _con.leastSize;
+            auto size = cast(uint)_con.leastSize;
             if (size > 0)
             {
                 ubyte[] data = new ubyte[](size);
