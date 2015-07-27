@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/factory.d
+ * /home/tomas/workspace/mqtt-d/source/mqttd/serialization.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>

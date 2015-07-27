@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/message.d
+ * /home/tomas/workspace/mqtt-d/source/mqttd/message.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>

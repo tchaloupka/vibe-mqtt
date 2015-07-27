@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/package.d
+ * /home/tomas/workspace/mqtt-d/source/mqttd/package.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>

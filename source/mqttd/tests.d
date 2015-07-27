@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * C:\Projects\mqtt-d\source\mqttd\tests.d
+ * /home/tomas/workspace/mqtt-d/source/mqttd/tests.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>

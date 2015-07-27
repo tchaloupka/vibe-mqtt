@@ -1,6 +1,6 @@
 ﻿/**
  * 
- * /home/tomas/workspace/mqtt-d/source/traits.d
+ * /home/tomas/workspace/mqtt-d/source/mqttd/traits.d
  * 
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
