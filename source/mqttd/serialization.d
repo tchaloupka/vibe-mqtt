@@ -96,6 +96,11 @@ struct Serializer(R) if (canSerializeTo!(R))
         //set remaining packet length by checking packet conditions
         item.header.length = L.processMembers(item);
 
+        static if (__traits(hasMember, R, "reserve")) // we can reserve required size to serialize packet
+        {
+            _output.reserve(item.header.length + 4); // 4 = max header size
+        }
+
         //check if is valid
         try item.validate();
         catch (Exception ex) 
