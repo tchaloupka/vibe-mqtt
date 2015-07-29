@@ -39,6 +39,7 @@ import vibe.core.log;
 import vibe.core.net: TCPConnection;
 import vibe.core.stream;
 import vibe.core.task;
+import vibe.core.concurrency;
 import vibe.utils.array : FixedRingBuffer;
 
 import std.datetime;
@@ -49,6 +50,10 @@ import std.traits;
 enum MQTT_BROKER_DEFAULT_PORT = 1883u;
 enum MQTT_BROKER_DEFAULT_SSL_PORT = 8883u;
 enum MQTT_SESSION_MAX_PACKETS = ushort.max;
+enum MQTT_CLIENT_ID = "vibe-mqtt"; /// default client identifier
+enum MQTT_RETRY_DELAY = 10_000u; /// delay for retry publish, subscribe and unsubscribe for QoS Level 1 or 2 [ms]
+enum MQTT_RETRY_ATTEMPTS = 3u; /// max publish, subscribe and unsubscribe retry for QoS Level 1 or 2
+
 
 alias SessionContainer = FixedRingBuffer!(PacketContext, MQTT_SESSION_MAX_PACKETS);
 
@@ -57,14 +62,19 @@ struct Settings
 {
     string host = "127.0.0.1"; /// message broker address
     ushort port = MQTT_BROKER_DEFAULT_PORT; /// message broker port
-    string clientId = "vibe-d.mqtt"; /// Client Id to identify within message broker (must be unique)
+    string clientId = MQTT_CLIENT_ID; /// Client Id to identify within message broker (must be unique)
     string userName = null; /// optional user name to login with
     string password = null; /// user password
+    int retryDelay = MQTT_RETRY_DELAY;
+    int retryAttempts = MQTT_RETRY_ATTEMPTS; /// how many times will client try to resend QoS1 and QoS2 packets
 }
 
 /// MQTT packet state
 enum PacketState
 {
+    queuedQos0, /// QOS = 0, Message queued
+    queuedQos1, /// QOS = 1, Message queued
+    queuedQos2, /// QOS = 2, Message queued
     waitForPuback, /// QOS = 1, PUBLISH sent, wait for PUBACK
     waitForPubrec, /// QOS = 2, PUBLISH sent, wait for PUBREC
     waitForPubrel, /// QOS = 2, PUBREC sent, wait for PUBREL
@@ -194,6 +204,16 @@ struct Session
         return false;
     }
 
+    @property ref PacketContext front()
+    {
+        return _packets.front();
+    }
+
+    void popFront()
+    {
+        _packets.popFront();
+    }
+
 @safe @nogc pure nothrow:
 
     /// Clears cached messages
@@ -242,6 +262,7 @@ class MqttClient
 
             _con = connectTCP(_settings.host, _settings.port);
             _listener = runTask(&listener);
+            _dispatcher = runTask(&dispatcher);
 
             version(MqttDebug) logDebug("MQTT Broker Connecting");
 
@@ -308,13 +329,11 @@ class MqttClient
             if (qos == QoSLevel.QoS1 || qos == QoSLevel.QoS2)
                 pub.packetId = nextPacketId();
 
-            if (qos == QoSLevel.QoS1)
-            {
-                //treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
-                _session.add(pub, PacketState.waitForPuback);
-            }
+            _session.add(pub, qos == QoSLevel.QoS0 ? 
+                PacketState.queuedQos0 : 
+                (qos == QoSLevel.QoS1 ? PacketState.queuedQos1 : PacketState.queuedQos2));
 
-            send(pub);
+            _dispatcher.send(true);
         }
 
         /**
@@ -364,6 +383,7 @@ class MqttClient
         {
             //treat the PUBLISH Packet as “unacknowledged” until corresponding PUBACK received
             _session.removeAt(idx);
+            _dispatcher.send(true);
         }
     }
 
@@ -410,7 +430,7 @@ private:
     Settings _settings;
     TCPConnection _con;
     Session _session;
-    Task _listener;
+    Task _listener, _dispatcher;
     Serializer!(Appender!(ubyte[])) _sendBuffer;
     FixedRingBuffer!ubyte _readBuffer;
     ubyte[] _packetBuffer;
@@ -492,6 +512,7 @@ final:
         }
     }
 
+    /// loop to receive packets
     void listener()
     in { assert(_con && _con.connected); }
     body
@@ -513,6 +534,72 @@ final:
         }
 
         version(MqttDebug) logDebug("MQTT Exiting listening loop");
+    }
+
+    /// loop to dispatch in session stored packets
+    void dispatcher()
+    in { assert(_con && _con.connected); }
+    body
+    {
+        import vibe.core.log: logError;
+        import vibe.core.core : yield;
+
+        version(MqttDebug) logDebug("MQTT Entering dispatch loop");
+
+        bool exit = false;
+        while (_con.connected && !exit)
+        {
+            // wait for info about change or timeout
+            receiveTimeout(_settings.retryDelay.msecs,
+                (bool msg) { exit = !msg; });
+
+            if (_session.packetCount > 0)
+            {
+                //version(MqttDebug) logDebug("MQTT Packets in session: %s", _session.packetCount);
+                auto ctx = _session.front();
+                final switch (ctx.state)
+                {
+                    case PacketState.queuedQos0: // just send it
+                        assert(ctx.packetType == PacketType.PUBLISH);
+                        send(ctx.publish);
+                        _session.popFront(); // remove it from session
+                        break;
+                    case PacketState.queuedQos1:
+                        //treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
+                        assert(ctx.packetType == PacketType.PUBLISH);
+                        assert(ctx.publish.header.qos == QoSLevel.QoS1);
+                        send(ctx.publish);
+                        ctx.state = PacketState.waitForPuback; // change to next state
+                        break;
+                    case PacketState.queuedQos2:
+                        break;
+                    case PacketState.sendPuback:
+                        break;
+                    case PacketState.sendPubcomp:
+                        break;
+                    case PacketState.sendPubrec:
+                        break;
+                    case PacketState.sendPubrel:
+                        break;
+                    case PacketState.waitForPuback:
+                        break;
+                    case PacketState.waitForPubcomp:
+                        break;
+                    case PacketState.waitForPubrec:
+                        break;
+                    case PacketState.waitForPubrel:
+                        break;
+                    case PacketState.waitForSuback:
+                        break;
+                    case PacketState.waitForUnsuback:
+                        break;
+                    case PacketState.any:
+                        assert(0, "Invalid state");
+                }
+            }
+        }
+
+        version(MqttDebug) logDebug("MQTT Exiting dispatch loop");
     }
 
     void send(T)(auto ref T msg) if (isMqttPacket!T)
