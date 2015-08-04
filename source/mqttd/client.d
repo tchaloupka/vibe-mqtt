@@ -173,6 +173,7 @@ struct Session
         auto ctx = PacketContext();
         ctx = packet;
         ctx.timestamp = Clock.currTime;
+        ctx.state = state;
 
         if(_packets.capacity == 0)
             _packets.popBack(); // make place by oldest one removal
