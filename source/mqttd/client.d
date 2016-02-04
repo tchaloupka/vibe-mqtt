@@ -273,11 +273,11 @@ class MqttClient
             if (_settings.userName.length > 0)
             {
                 con.flags.userName = true;
-                con.userName = "user";
+                con.userName = _settings.userName;
                 if (_settings.password.length > 0)
                 {
                     con.flags.password = true;
-                    con.password = "user";
+                    con.password = _settings.password;
                 }
             }
 
