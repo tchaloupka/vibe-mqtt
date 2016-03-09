@@ -247,7 +247,6 @@ class MqttClient
         if (_settings.clientId.length == 0) // set clientId if not provided
             _settings.clientId = Socket.hostName;
 
-        _readBuffer.freeOnDestruct = true;
         _readBuffer.capacity = 4 * 1024;
     }
 
