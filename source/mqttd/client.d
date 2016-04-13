@@ -175,7 +175,7 @@ struct Session
         ctx.timestamp = Clock.currTime;
         ctx.state = state;
 
-        if(_packets.capacity == 0)
+        if (_packets.full())
             _packets.popBack(); // make place by oldest one removal
 
         _packets.put(ctx);
