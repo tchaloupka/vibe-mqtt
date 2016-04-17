@@ -556,7 +556,7 @@ final:
             if (_session.packetCount > 0)
             {
                 //version(MqttDebug) logDebug("MQTT Packets in session: %s", _session.packetCount);
-                auto ctx = _session.front();
+                auto ctx = &_session.front();
                 final switch (ctx.state)
                 {
                     case PacketState.queuedQos0: // just send it
