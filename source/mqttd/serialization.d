@@ -115,6 +115,8 @@ private:
 
     ref Serializer write(T)(T val) if (canWrite!T)
     {
+        import std.traits : isDynamicArray;
+
         bool handled = true;
         static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
         {
@@ -141,6 +143,7 @@ private:
         else static if (is(T:string))
         {
             import std.string : representation;
+            import std.exception : enforce;
             
             enforce(val.length <= 0xFF, "String too long: ", val);
             
@@ -235,6 +238,8 @@ private:
     
     T read(T)() if (canRead!T)
     {
+        import std.traits : isDynamicArray;
+
         auto handled = true;
         T res = void;
 
@@ -317,6 +322,8 @@ private:
 @safe @nogc
 uint itemLength(T)(auto ref in T item) pure nothrow
 {
+    import std.traits : isDynamicArray;
+
     static if (is(T == FixedHeader)) return 0;
     else static if (is(T:ubyte)) return 1;
     else static if (is(T:ushort)) return 2;
@@ -340,9 +347,12 @@ uint itemLength(T)(auto ref in T item) pure nothrow
 void validate(T)(auto ref in T packet) pure
 {
     import std.string : format;
+    import std.exception : enforce;
     
     static if (__traits(hasMember, T, "header"))
     {
+        import std.typecons : Nullable;
+
         void checkHeader(ubyte value, ubyte mask = 0xFF, Nullable!uint length = Nullable!uint())
         {
             enforce((mask & 0xF0) == 0x00 

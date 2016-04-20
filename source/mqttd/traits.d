@@ -30,7 +30,7 @@
 module mqttd.traits;
 
 import std.range;
-import std.traits : isDynamicArray;
+import std.traits : isDynamicArray, isIntegral;
 
 import mqttd.messages;
 
