@@ -12,7 +12,7 @@ vibe-mqtt
 
 **Status:** Still beta so API can change frequently
 
-[![Build Status](https://travis-ci.org/chalucha/vibe-mqtt.svg?branch=master)](https://travis-ci.org/chalucha/vibe-mqtt)
+[![Build Status](https://travis-ci.org/tchaloupka/vibe-mqtt.svg?branch=master)](https://travis-ci.org/tchaloupka/vibe-mqtt)
 
 # Usage
 
