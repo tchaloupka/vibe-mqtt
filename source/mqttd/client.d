@@ -301,11 +301,12 @@ class MqttClient
             }
         }
 
+        /**
+         * Return true, if client is in a connected state
+         */
         @property bool connected() const
-        in { assert(!(_con is null)); }
-        body
         {
-            return _con.connected;
+            return _con !is null && _con.connected;
         }
 
         /**
