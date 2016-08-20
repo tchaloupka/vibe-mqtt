@@ -9,7 +9,7 @@
         {
             "name": "vibed",
             "dependencies": {
-                "vibe-d": "~>0.7.25"
+                "vibe-d:core": "~>0.7.25"
             }
         }
     ]
