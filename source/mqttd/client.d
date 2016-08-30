@@ -260,6 +260,9 @@ class MqttClient
             import vibe.core.net: connectTCP;
             import vibe.core.core: runTask;
 
+            //cleanup before reconnects
+            _readBuffer.clear();
+
             _con = connectTCP(_settings.host, _settings.port);
             _listener = runTask(&listener);
             _dispatcher = runTask(&dispatcher);
