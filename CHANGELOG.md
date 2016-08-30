@@ -4,6 +4,7 @@ vibe-mqtt changelog
 #### v0.1.6
 - Remove repeated allocation of buffer in listener loop
 - Clean read buffer before connect
+- Check if TCPConnection is empty in listener loop
 - Fix #6 - disconnect() hangs up then listener() fibre in different task 
 
 #### v0.1.5
