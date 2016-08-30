@@ -292,12 +292,12 @@ class MqttClient
 
             if (_con.connected)
             {
-                if(Task.getThis !is _listener)
-                    _listener.join;
-
                 send(Disconnect());
                 _con.flush();
                 _con.close();
+
+                if(Task.getThis !is _listener)
+                    _listener.join;
             }
         }
 
