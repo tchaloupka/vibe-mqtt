@@ -527,7 +527,7 @@ final:
 
         auto buffer = new ubyte[4096];
 
-        while (_con.connected)
+        while (_con.connected && !_con.empty)
         {
             auto size = _con.leastSize;
             if (size > 0)
