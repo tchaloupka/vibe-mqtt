@@ -8,37 +8,37 @@ import mqttd;
 
 shared static this()
 {
-    import vibe.core.log : setLogFormat, FileLogger;
-    import vibe.core.core : sleep, runTask;
-    import core.time;
+	import vibe.core.log : setLogFormat, FileLogger;
+	import vibe.core.core : sleep, runTask;
+	import core.time;
 
-    class Subscriber : MqttClient
-    {
-        this(Settings settings)
-        {
-            super(settings);
-        }
+	class Subscriber : MqttClient
+	{
+		this(Settings settings)
+		{
+			super(settings);
+		}
 
-        override void onPublish(Publish packet)
-        {
-            super.onPublish(packet);
+		override void onPublish(Publish packet)
+		{
+			super.onPublish(packet);
 
-            writeln(packet.topic, ": ", cast(string)packet.payload);
-        }
+			writeln(packet.topic, ": ", cast(string)packet.payload);
+		}
 
-        override void onConnAck(ConnAck packet)
-        {
-            super.onConnAck(packet);
+		override void onConnAck(ConnAck packet)
+		{
+			super.onConnAck(packet);
 
-            this.subscribe(["chat/#"]);
-        }
-    }
+			this.subscribe(["chat/#"]);
+		}
+	}
 
-    setLogFormat(FileLogger.Format.threadTime);
+	setLogFormat(FileLogger.Format.threadTime);
 
-    auto settings = Settings();
-    settings.clientId = "test subscriber";
+	auto settings = Settings();
+	settings.clientId = "test subscriber";
 
-    auto mqtt = new Subscriber(settings);
-    mqtt.connect();
+	auto mqtt = new Subscriber(settings);
+	mqtt.connect();
 }

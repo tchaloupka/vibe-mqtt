@@ -8,36 +8,36 @@ import mqttd;
 
 shared static this()
 {
-    import vibe.core.log : setLogFormat, FileLogger;
-    import vibe.core.core : sleep, runTask;
-    import core.time;
+	import vibe.core.log : setLogFormat, FileLogger;
+	import vibe.core.core : sleep, runTask;
+	import core.time;
 
-    setLogFormat(FileLogger.Format.threadTime);
+	setLogFormat(FileLogger.Format.threadTime);
 
-    auto settings = Settings();
-    settings.clientId = "publisher";
+	auto settings = Settings();
+	settings.clientId = "publisher";
 
-    auto mqtt = new MqttClient(settings);
-    mqtt.connect();
+	auto mqtt = new MqttClient(settings);
+	mqtt.connect();
 
-    auto publisherQ0 = runTask(() 
-        {
-            while (mqtt.connected)
-            {
-                mqtt.publish("chat/simple", "I'm still here!!!");
+	auto publisherQ0 = runTask(()
+		{
+			while (mqtt.connected)
+			{
+				mqtt.publish("chat/simple", "I'm still here!!!");
 
-                sleep(2.seconds());
-            }
-        });
+				sleep(2.seconds());
+			}
+		});
 
-    auto publisherQ1 = runTask(() 
-        {
-            sleep(1.seconds());
-            while (mqtt.connected)
-            {
-                mqtt.publish("chat/qos1", "Ack required", QoSLevel.QoS1);
-                
-                sleep(2.seconds());
-            }
-        });
+	auto publisherQ1 = runTask(()
+		{
+			sleep(1.seconds());
+			while (mqtt.connected)
+			{
+				mqtt.publish("chat/qos1", "Ack required", QoSLevel.QoS1);
+
+				sleep(2.seconds());
+			}
+		});
 }
