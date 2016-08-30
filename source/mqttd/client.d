@@ -525,15 +525,16 @@ final:
 
         version(MqttDebug) logDebug("MQTT Entering listening loop");
 
+        auto buffer = new ubyte[4096];
+
         while (_con.connected)
         {
-            auto size = cast(uint)_con.leastSize;
+            auto size = _con.leastSize;
             if (size > 0)
             {
-                ubyte[] data = new ubyte[](size);
-
-                _con.read(data);
-                proccessData(data);
+                if (size > buffer.length) size = buffer.length;
+                _con.read(buffer[0..size]);
+                proccessData(buffer[0..size]);
             }
         }
 
