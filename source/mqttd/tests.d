@@ -34,6 +34,7 @@ version (unittest):
 import std.array;
 import std.stdio;
 import mqttd;
+import mqttd.serialization;
 
 /// ubyte tests
 unittest
