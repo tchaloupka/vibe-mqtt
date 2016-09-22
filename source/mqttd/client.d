@@ -348,7 +348,7 @@ class MqttClient
 		 *      qos = This gives the maximum QoS level at which the Server can send Application Messages to the Client.
 		 *
 		 */
-		void subscribe(string[] topics, QoSLevel qos = QoSLevel.QoS0)
+		void subscribe(const string[] topics, QoSLevel qos = QoSLevel.QoS0)
 		{
 			import std.algorithm : map;
 			import std.array : array;
