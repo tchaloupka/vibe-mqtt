@@ -1,6 +1,11 @@
 vibe-mqtt changelog
 ===================
 
+#### v0.1.7
+- Fix import in tests.d
+- Make client.subscribe topics parameter const to allow receive immutable
+- onDisconnect() added to detect client disconnection from broker
+
 #### v0.1.6
 - Remove repeated allocation of buffer in listener loop
 - Clean read buffer before connect
