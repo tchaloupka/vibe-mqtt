@@ -167,9 +167,16 @@ struct PacketContext
 struct Session
 {
 	/// Adds packet to Session
-	void add(T)(auto ref T packet, PacketState state)
+	auto add(T)(auto ref T packet, PacketState state)
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
+		// assign packet id
+		static if (is(T == Publish))
+		{
+			if (state != PacketState.queuedQos0) packet.packetId = nextPacketId();
+		}
+		else packet.packetId = nextPacketId();
+
 		auto ctx = PacketContext();
 		ctx = packet;
 		ctx.timestamp = Clock.currTime;
@@ -179,6 +186,8 @@ struct Session
 			_packets.popBack(); // make place by oldest one removal
 
 		_packets.put(ctx);
+
+		return packet.packetId;
 	}
 
 	/// Removes the stored PacketContext
@@ -188,7 +197,7 @@ struct Session
 	}
 
 	/// Finds package context stored in session
-	bool canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
+	auto canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
 	{
 		size_t i;
 		foreach(ref c; _packets)
@@ -224,14 +233,24 @@ struct Session
 	}
 
 	/// Number of packets to process
-	@property size_t packetCount() const
+	@property auto packetCount() const
 	{
 		return _packets.length;
+	}
+
+	/// Gets next packet id
+	@property auto nextPacketId()
+	{
+		//TODO: Is this ok or should we check with session packets?
+		//packet id can't be 0!
+		_packetId = cast(ushort)((_packetId % MQTT_SESSION_MAX_PACKETS) != 0 ? _packetId + 1 : 1);
+		return _packetId;
 	}
 
 private:
 	/// Packets to handle
 	SessionContainer _packets;
+	ushort _packetId = 0u;
 }
 
 /// MQTT Client implementation
@@ -331,8 +350,6 @@ class MqttClient
 			pub.header.retain = retain;
 			pub.topic = topic;
 			pub.payload = cast(ubyte[]) payload;
-			if (qos == QoSLevel.QoS1 || qos == QoSLevel.QoS2)
-				pub.packetId = nextPacketId();
 
 			_session.add(pub, qos == QoSLevel.QoS0 ?
 				PacketState.queuedQos0 :
@@ -355,10 +372,10 @@ class MqttClient
 			import std.array : array;
 
 			auto sub = Subscribe();
-			sub.packetId = nextPacketId();
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
 
-			send(sub);
+			_session.add(sub, PacketState.waitForSuback);
+			_dispatcher.send(true);
 		}
 	}
 
@@ -424,6 +441,14 @@ class MqttClient
 	void onSubAck(SubAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onSubAck - %s", packet);
+
+		PacketContext ctx;
+		size_t idx;
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForSuback))
+		{
+			_session.removeAt(idx);
+			_dispatcher.send(true);
+		}
 	}
 
 	void onUnsubAck(UnsubAck packet)
@@ -444,7 +469,6 @@ private:
 	Serializer!(Appender!(ubyte[])) _sendBuffer;
 	FixedRingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
-	ushort _packetId = 1u;
 	bool onDisconnectCalled;
 
 final:
@@ -587,6 +611,7 @@ final:
 						ctx.state = PacketState.waitForPuback; // change to next state
 						break;
 					case PacketState.queuedQos2:
+						//TODO
 						break;
 					case PacketState.sendPuback:
 						break;
@@ -605,6 +630,8 @@ final:
 					case PacketState.waitForPubrel:
 						break;
 					case PacketState.waitForSuback:
+						assert(ctx.packetType == PacketType.SUBSCRIBE);
+						send(ctx.subscribe);
 						break;
 					case PacketState.waitForUnsuback:
 						break;
@@ -631,15 +658,6 @@ final:
 		}
 	}
 
-	/// Gets next packet id
-	@property ushort nextPacketId()
-	{
-		//TODO: Is this ok or should we check with session packets?
-		//packet id can't be 0!
-		_packetId = cast(ushort)((_packetId % ushort.max) != 0 ? _packetId + 1 : 1);
-		return _packetId;
-	}
-
 	auto callOnDisconnect()
 	{
 		if (!onDisconnectCalled)
@@ -655,14 +673,14 @@ unittest
 	Session s;
 
 	auto pub = Publish();
-	pub.packetId = 0xabcd;
-	s.add(pub, PacketState.waitForPuback);
+	auto id = s.add(pub, PacketState.waitForPuback);
 
 	assert(s.packetCount == 1);
 
 	PacketContext ctx;
 	size_t idx;
-	assert(s.canFind(0xabcd, ctx, idx));
+	assert(id != 0);
+	assert(s.canFind(id, ctx, idx));
 	assert(idx == 0);
 	assert(s.packetCount == 1);
 
