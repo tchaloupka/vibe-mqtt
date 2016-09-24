@@ -1,6 +1,11 @@
 vibe-mqtt changelog
 ===================
 
+#### v0.1.8
+- Fix subscribe to go through session, not directly
+- Fix unittest imports
+- Fix #10 - check packetId usage in session
+
 #### v0.1.7
 - Fix import in tests.d
 - Make client.subscribe topics parameter const to allow receive immutable
