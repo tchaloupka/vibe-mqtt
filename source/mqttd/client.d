@@ -170,6 +170,9 @@ struct Session
 	auto add(T)(auto ref T packet, PacketState state)
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
+		// make place by oldest one removal
+		if (_packets.full()) _packets.popBack();
+
 		// assign packet id
 		static if (is(T == Publish))
 		{
@@ -182,9 +185,6 @@ struct Session
 		ctx.timestamp = Clock.currTime;
 		ctx.state = state;
 
-		if (_packets.full())
-			_packets.popBack(); // make place by oldest one removal
-
 		_packets.put(ctx);
 
 		return packet.packetId;
@@ -193,6 +193,7 @@ struct Session
 	/// Removes the stored PacketContext
 	void removeAt(size_t idx)
 	{
+		setUnused(_packets[idx].packetId);
 		_packets.removeAt(_packets[idx..idx+1]);
 	}
 
@@ -221,6 +222,7 @@ struct Session
 
 	void popFront()
 	{
+		setUnused(_packets.front().packetId);
 		_packets.popFront();
 	}
 
@@ -229,6 +231,7 @@ struct Session
 	/// Clears cached messages
 	void clear()
 	{
+		_idUsage = 0;
 		_packets.clear();
 	}
 
@@ -241,16 +244,56 @@ struct Session
 	/// Gets next packet id
 	@property auto nextPacketId()
 	{
-		//TODO: Is this ok or should we check with session packets?
-		//packet id can't be 0!
-		_packetId = cast(ushort)((_packetId % MQTT_SESSION_MAX_PACKETS) != 0 ? _packetId + 1 : 1);
+		do
+		{
+			//packet id can't be 0!
+			_packetId = cast(ushort)((_packetId % MQTT_SESSION_MAX_PACKETS) != 0 ? _packetId + 1 : 1);
+		}
+		while (isUsed(_packetId));
+
+		setUsed(_packetId);
+
 		return _packetId;
 	}
+
+package:
+	pragma(inline, true) auto isUsed(ushort id) { return (_idUsage[getIdx(id)] & getIdxValue(id)) == getIdxValue(id); }
+	pragma(inline, true) auto setUsed(ushort id)
+	{
+		assert(!isUsed(id));
+		_idUsage[getIdx(id)] |= getIdxValue(id);
+	}
+	pragma(inline, true) auto setUnused(ushort id)
+	{
+		if (id == 0) return;
+		assert(isUsed(id));
+		_idUsage[getIdx(id)] ^= getIdxValue(id);
+	}
+	pragma(inline, true) auto getIdx(ushort id) { return id / 64; }
+	pragma(inline, true) auto getIdxValue(ushort id) { return cast(size_t)(1uL << (id % 64)); }
 
 private:
 	/// Packets to handle
 	SessionContainer _packets;
 	ushort _packetId = 0u;
+	size_t[1024] _idUsage; //1024 * 64 = 65536 => id usage flags storage
+}
+
+unittest
+{
+	Session s;
+	assert(s.getIdx(1) == 0);
+	assert(s.getIdx(64) == 1);
+	assert(s.getIdxValue(1) == s.getIdxValue(65));
+	assert(s.getIdxValue(63) == 0x8000000000000000);
+	assert(s.getIdx(128) == 2);
+	s.setUsed(1);
+	assert(s.isUsed(1));
+	s.setUsed(64);
+	assert(s.isUsed(64));
+	s.setUnused(64);
+	assert(!s.isUsed(64));
+	assert(s.isUsed(1));
 }
 
 /// MQTT Client implementation
