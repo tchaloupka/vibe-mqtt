@@ -266,6 +266,7 @@ class MqttClient
 			_con = connectTCP(_settings.host, _settings.port);
 			_listener = runTask(&listener);
 			_dispatcher = runTask(&dispatcher);
+			onDisconnectCalled = false;
 
 			version(MqttDebug) logDebug("MQTT Broker Connecting");
 
@@ -291,7 +292,7 @@ class MqttClient
 		in { assert(!(_con is null)); }
 		body
 		{
-			version(MqttDebug) logDebug("MQTT Disconnectng from Broker");
+			version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
 
 			if (_con.connected)
 			{
@@ -430,6 +431,11 @@ class MqttClient
 		version(MqttDebug) logDebug("MQTT onUnsubAck - %s", packet);
 	}
 
+	void onDisconnect()
+	{
+		version(MqttDebug) logDebug("MQTT onDisconnect");
+	}
+
 private:
 	Settings _settings;
 	TCPConnection _con;
@@ -439,6 +445,7 @@ private:
 	FixedRingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
 	ushort _packetId = 1u;
+	bool onDisconnectCalled;
 
 final:
 
@@ -538,6 +545,8 @@ final:
 			}
 		}
 
+		if (!_con.connected) callOnDisconnect();
+
 		version(MqttDebug) logDebug("MQTT Exiting listening loop");
 	}
 
@@ -552,6 +561,7 @@ final:
 		version(MqttDebug) logDebug("MQTT Entering dispatch loop");
 
 		bool exit = false;
+		bool con = true;
 		while (_con.connected && !exit)
 		{
 			// wait for info about change or timeout
@@ -604,6 +614,8 @@ final:
 			}
 		}
 
+		if (!_con.connected) callOnDisconnect();
+
 		version(MqttDebug) logDebug("MQTT Exiting dispatch loop");
 	}
 
@@ -626,6 +638,15 @@ final:
 		//packet id can't be 0!
 		_packetId = cast(ushort)((_packetId % ushort.max) != 0 ? _packetId + 1 : 1);
 		return _packetId;
+	}
+
+	auto callOnDisconnect()
+	{
+		if (!onDisconnectCalled)
+		{
+			onDisconnectCalled = true;
+			onDisconnect();
+		}
 	}
 }
 

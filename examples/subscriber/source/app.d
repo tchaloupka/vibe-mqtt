@@ -31,6 +31,13 @@ shared static this()
 			super.onConnAck(packet);
 
 			this.subscribe(["chat/#"]);
+
+			// disconnect after 20 seconds
+			runTask(()
+				{
+					sleep(20.seconds());
+					disconnect();
+				});
 		}
 	}
 
