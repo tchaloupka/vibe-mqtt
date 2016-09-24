@@ -1,7 +1,7 @@
+[![Build Status](https://travis-ci.org/tchaloupka/vibe-mqtt.svg?branch=master)](https://travis-ci.org/tchaloupka/vibe-mqtt)
+
 vibe-mqtt
 =========
-
-# Description
 [MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written in D.
 
 **MQTT protocol version supported:** 3.1.1
@@ -10,9 +10,9 @@ vibe-mqtt
 
 **Tested on:** [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
 
-**Status:** Still beta so API can change frequently
+**Status:** Supports QoS level 0 and QoS level 1 (QoS 2 TBD - [#12](https://github.com/tchaloupka/vibe-mqtt/issues/12))
 
-[![Build Status](https://travis-ci.org/tchaloupka/vibe-mqtt.svg?branch=master)](https://travis-ci.org/tchaloupka/vibe-mqtt)
+Pull Requests are welcome, don't be shy ;)
 
 # Usage
 
