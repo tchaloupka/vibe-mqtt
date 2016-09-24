@@ -110,10 +110,7 @@ struct Serializer(R) if (canSerializeTo!(R))
 		W.processMembers(item);
 	}
 
-private:
-	R _output;
-
-	ref Serializer write(T)(T val) if (canWrite!T)
+	package ref Serializer write(T)(T val) if (canWrite!T)
 	{
 		import std.traits : isDynamicArray;
 
@@ -168,6 +165,9 @@ private:
 		if (handled) return this;
 		assert(0, "Not implemented write for: " ~ T.stringof);
 	}
+
+private:
+	R _output;
 }
 
 template deserialize(T)
@@ -232,11 +232,7 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
 		return res;
 	}
 
-private:
-	R _input;
-	uint _remainingLen;
-
-	T read(T)() if (canRead!T)
+	package T read(T)() if (canRead!T)
 	{
 		import std.traits : isDynamicArray;
 
@@ -316,6 +312,10 @@ private:
 		if (handled) return res;
 		assert(0, "Not implemented read for: " ~ T.stringof);
 	}
+
+private:
+	R _input;
+	uint _remainingLen;
 }
 
 /// Gets required buffer size to encode into
