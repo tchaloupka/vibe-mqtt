@@ -5,6 +5,7 @@ vibe-mqtt changelog
 - Fix subscribe to go through session, not directly
 - Fix unittest imports
 - Fix #10 - check packetId usage in session
+- Fix #18 - unsubscribe is not implemented
 
 #### v0.1.7
 - Fix import in tests.d

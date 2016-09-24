@@ -420,6 +420,25 @@ class MqttClient
 			_session.add(sub, PacketState.waitForSuback);
 			_dispatcher.send(true);
 		}
+
+		/**
+		 * Unsubscribes from the specified topics
+		 *
+		 * Params:
+		 *      topics = Array of topic filters to unsubscribe from
+		 *
+		 */
+		void unsubscribe(string[] topics...)
+		{
+			import std.algorithm : map;
+			import std.array : array;
+			
+			auto unsub = Unsubscribe();
+			unsub.topics = topics;
+			
+			_session.add(unsub, PacketState.waitForUnsuback);
+			_dispatcher.send(true);
+		}
 	}
 
 	void onConnAck(ConnAck packet)
@@ -497,6 +516,14 @@ class MqttClient
 	void onUnsubAck(UnsubAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onUnsubAck - %s", packet);
+
+		PacketContext ctx;
+		size_t idx;
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForUnsuback))
+		{
+			_session.removeAt(idx);
+			_dispatcher.send(true);
+		}
 	}
 
 	void onDisconnect()
@@ -677,6 +704,8 @@ final:
 						send(ctx.subscribe);
 						break;
 					case PacketState.waitForUnsuback:
+						assert(ctx.packetType == PacketType.UNSUBSCRIBE);
+						send(ctx.unsubscribe);
 						break;
 					case PacketState.any:
 						assert(0, "Invalid state");

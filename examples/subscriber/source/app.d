@@ -32,11 +32,18 @@ shared static this()
 
 			this.subscribe(["chat/#"]);
 
+			// unsubscribe after 15 seconds
+			runTask(()
+				{
+					sleep(15.seconds());
+					this.unsubscribe("chat/#");
+				});
+
 			// disconnect after 20 seconds
 			runTask(()
 				{
 					sleep(20.seconds());
-					disconnect();
+					this.disconnect();
 				});
 		}
 	}
