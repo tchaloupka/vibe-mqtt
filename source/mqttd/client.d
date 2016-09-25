@@ -213,6 +213,12 @@ struct Session
 		return event.wait(timeout, event.emitCount);
 	}
 
+	/// Manually emit session state change to all listeners
+	auto emit()
+	{
+		return event.emit();
+	}
+
 	/// Removes the stored PacketContext
 	void removeAt(size_t idx)
 	{
@@ -347,6 +353,7 @@ unittest
 class MqttClient
 {
 	import std.array : Appender;
+	import vibe.core.core : Timer, createTimer;
 
 	this(Settings settings)
 	{
@@ -357,6 +364,11 @@ class MqttClient
 			_settings.clientId = Socket.hostName;
 
 		_readBuffer.capacity = 4 * 1024;
+		_conAckTimer = createTimer(
+			{
+				version (MqttDebug) logWarn("MQTT ConAck not received, disconnecting");
+				this.disconnect();
+			});
 	}
 
 	final
@@ -375,7 +387,7 @@ class MqttClient
 			_con = connectTCP(_settings.host, _settings.port);
 			_listener = runTask(&listener);
 			_dispatcher = runTask(&dispatcher);
-			onDisconnectCalled = false;
+			_onDisconnectCalled = false;
 
 			version(MqttDebug) logDebug("MQTT Broker Connecting");
 
@@ -394,6 +406,7 @@ class MqttClient
 			}
 
 			this.send(con);
+			_conAckTimer.rearm(5.seconds);
 		}
 
 		/// Sends Disconnect packet to the broker and closes the underlying connection
@@ -408,6 +421,8 @@ class MqttClient
 				this.send(Disconnect());
 				_con.flush();
 				_con.close();
+
+				_session.emit();
 
 				if(Task.getThis !is _listener)
 					_listener.join;
@@ -491,6 +506,7 @@ class MqttClient
 		if(packet.returnCode == ConnectReturnCode.ConnectionAccepted)
 		{
 			version(MqttDebug) logDebug("MQTT Connection accepted");
+			_conAckTimer.stop();
 		}
 		else throw new Exception(format("Connection refused: %s", packet.returnCode));
 	}
@@ -580,7 +596,8 @@ private:
 	Serializer!(Appender!(ubyte[])) _sendBuffer;
 	FixedRingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
-	bool onDisconnectCalled;
+	bool _onDisconnectCalled;
+	Timer _conAckTimer;
 
 final:
 
@@ -699,6 +716,7 @@ final:
 			_session.wait(_settings.retryDelay.msecs);
 
 			if (!_con.connected) break;
+			if (_conAckTimer.pending) continue; //wait for ConAck before sending any messages
 
 			ushort idx;
 			while (idx < _session.packetCount)
@@ -776,9 +794,9 @@ final:
 
 	auto callOnDisconnect()
 	{
-		if (!onDisconnectCalled)
+		if (!_onDisconnectCalled)
 		{
-			onDisconnectCalled = true;
+			_onDisconnectCalled = true;
 			onDisconnect();
 		}
 	}
