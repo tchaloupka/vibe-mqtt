@@ -185,7 +185,7 @@ struct Session
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
 		if (origin == PacketOrigin.client && !packet.packetId)
-			{
+		{
 			// assign packet id
 			static if (is(T == Publish))
 			{
@@ -193,11 +193,16 @@ struct Session
 				else if (_packets.full())
 				{
 					// session is full - drop QoS0 messages
-					version(MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
+					version (MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
 					return cast(ushort)0;
 				}
 			}
 			else packet.packetId = nextPacketId();
+		}
+		else if (_packets.full())
+		{
+			version (MqttDebug) logDiagnostic("MQTT SessionFull - waiting");
+			this.wait();
 		}
 
 		auto ctx = PacketContext();
@@ -292,6 +297,7 @@ struct Session
 		{
 			if (_packets.full)
 			{
+				version (MqttDebug) logDiagnostic("MQTT SessionFull - waiting");
 				this.wait();
 				continue;
 			}
@@ -792,7 +798,7 @@ final:
 			ushort idx;
 			while (idx < _session.packetCount)
 			{
-				//version(MqttDebug) logDebug("MQTT Packets in session: %s", _session.packetCount);
+				//version (MqttDebug) logDebug("MQTT Packets in session: %s", _session.packetCount);
 				auto ctx = &_session[idx];
 				final switch (ctx.state)
 				{
@@ -861,7 +867,7 @@ final:
 					case PacketState.waitForPubcomp:
 						assert(ctx.packetType == PacketType.PUBLISH);
 						assert(ctx.publish.header.qos == QoSLevel.QoS2);
-						assert(ctx.origin == PacketOrigin.broker);
+						assert(ctx.origin == PacketOrigin.client);
 						//TODO: Retry PubRel
 						break;
 					case PacketState.sendPubrec:
