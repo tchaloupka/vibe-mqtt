@@ -83,6 +83,8 @@ enum PacketState
 	sendPubrel, /// QOS = 2, start second phase handshake send PUBREL
 	sendPubcomp, /// QOS = 2, end second phase handshake send PUBCOMP
 	sendPuback, /// QOS = 1, PUBLISH received, send PUBACK
+	queuedSubscribe, /// Subscribe message queued
+	queuedUnsubscribe, /// Unsubscribe message queued
 	waitForSuback, /// (QOS = 1), SUBSCRIBE sent, wait for SUBACK
 	waitForUnsuback, /// (QOS = 1), UNSUBSCRIBE sent, wait for UNSUBACK
 	any /// for search purposes
@@ -385,7 +387,7 @@ class MqttClient
 				}
 			}
 
-			send(con);
+			this.send(con);
 		}
 
 		/// Sends Disconnect packet to the broker and closes the underlying connection
@@ -397,7 +399,7 @@ class MqttClient
 
 			if (_con.connected)
 			{
-				send(Disconnect());
+				this.send(Disconnect());
 				_con.flush();
 				_con.close();
 
@@ -454,7 +456,7 @@ class MqttClient
 			auto sub = Subscribe();
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
 
-			_session.add(sub, PacketState.waitForSuback);
+			_session.add(sub, PacketState.queuedSubscribe);
 		}
 
 		/**
@@ -472,7 +474,7 @@ class MqttClient
 			auto unsub = Unsubscribe();
 			unsub.topics = topics;
 
-			_session.add(unsub, PacketState.waitForUnsuback);
+			_session.add(unsub, PacketState.queuedUnsubscribe);
 		}
 	}
 
@@ -531,7 +533,7 @@ class MqttClient
 			auto ack = PubAck();
 			ack.packetId = packet.packetId;
 
-			send(ack);
+			this.send(ack);
 		}
 	}
 
@@ -682,9 +684,6 @@ final:
 	in { assert(_con && _con.connected); }
 	body
 	{
-		import vibe.core.log: logError;
-		import vibe.core.core : yield;
-
 		version(MqttDebug) logDebug("MQTT Entering dispatch loop");
 
 		bool con = true;
@@ -703,14 +702,14 @@ final:
 				{
 					case PacketState.queuedQos0: // just send it
 						assert(ctx.packetType == PacketType.PUBLISH);
-						send(ctx.publish);
+						this.send(ctx.publish);
 						_session.popFront(); // remove it from session
 						break;
 					case PacketState.queuedQos1:
 						//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
 						assert(ctx.packetType == PacketType.PUBLISH);
 						assert(ctx.publish.header.qos == QoSLevel.QoS1);
-						send(ctx.publish);
+						this.send(ctx.publish);
 						ctx.state = PacketState.waitForPuback; // change to next state
 						break;
 					case PacketState.queuedQos2:
@@ -724,21 +723,23 @@ final:
 						break;
 					case PacketState.sendPubrel:
 						break;
-					case PacketState.waitForPuback:
-						break;
-					case PacketState.waitForPubcomp:
-						break;
-					case PacketState.waitForPubrec:
-						break;
-					case PacketState.waitForPubrel:
-						break;
-					case PacketState.waitForSuback:
+					case PacketState.queuedSubscribe:
 						assert(ctx.packetType == PacketType.SUBSCRIBE);
-						send(ctx.subscribe);
+						this.send(ctx.subscribe);
+						ctx.state = PacketState.waitForSuback; // change to next state
 						break;
-					case PacketState.waitForUnsuback:
+					case PacketState.queuedUnsubscribe:
 						assert(ctx.packetType == PacketType.UNSUBSCRIBE);
-						send(ctx.unsubscribe);
+						this.send(ctx.unsubscribe);
+						ctx.state = PacketState.waitForUnsuback; // change to next state
+						break;
+					case PacketState.waitForPuback:
+					case PacketState.waitForSuback:
+					case PacketState.waitForUnsuback:
+					case PacketState.waitForPubcomp:
+					case PacketState.waitForPubrec:
+					case PacketState.waitForPubrel:
+						//waiting for server response, nothing to do here
 						break;
 					case PacketState.any:
 						assert(0, "Invalid state");
@@ -751,7 +752,7 @@ final:
 		version(MqttDebug) logDebug("MQTT Exiting dispatch loop");
 	}
 
-	void send(T)(auto ref T msg) if (isMqttPacket!T)
+	auto send(T)(auto ref T msg) if (isMqttPacket!T)
 	{
 		_sendBuffer.clear(); // clear to write new
 		_sendBuffer.serialize(msg);
@@ -760,7 +761,9 @@ final:
 		{
 			version(MqttDebug) logDebug("MQTT OUT: %(%.02x %)", _sendBuffer.data);
 			_con.write(_sendBuffer.data);
+			return true;
 		}
+		else return false;
 	}
 
 	auto callOnDisconnect()
