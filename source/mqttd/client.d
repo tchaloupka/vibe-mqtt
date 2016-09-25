@@ -509,7 +509,7 @@ class MqttClient
 		 *      topics = Array of topic filters to unsubscribe from
 		 *
 		 */
-		void unsubscribe(string[] topics...)
+		void unsubscribe(const string[] topics...)
 		{
 			import std.algorithm : map;
 			import std.array : array;
