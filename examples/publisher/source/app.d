@@ -24,9 +24,9 @@ shared static this()
 		{
 			while (mqtt.connected)
 			{
-				mqtt.publish("chat/simple", "I'm still here!!!");
+				mqtt.publish("chat/simple", "QoS0 message");
 
-				sleep(2.seconds());
+				sleep(3.seconds());
 			}
 		});
 
@@ -35,9 +35,20 @@ shared static this()
 			sleep(1.seconds());
 			while (mqtt.connected)
 			{
-				mqtt.publish("chat/qos1", "Ack required", QoSLevel.QoS1);
+				mqtt.publish("chat/qos1", "QoS1 message", QoSLevel.QoS1);
 
-				sleep(2.seconds());
+				sleep(3.seconds());
+			}
+		});
+
+	auto publisherQ2 = runTask(()
+		{
+			sleep(2.seconds());
+			while (mqtt.connected)
+			{
+				mqtt.publish("chat/qos2", "QoS2 message", QoSLevel.QoS2);
+
+				sleep(3.seconds());
 			}
 		});
 }

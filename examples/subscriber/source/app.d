@@ -30,7 +30,7 @@ shared static this()
 		{
 			super.onConnAck(packet);
 
-			this.subscribe(["chat/#"]);
+			this.subscribe(["chat/#"], QoSLevel.QoS2);
 
 			// unsubscribe after 15 seconds
 			runTask(()

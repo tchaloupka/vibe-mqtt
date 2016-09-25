@@ -91,11 +91,19 @@ enum PacketState
 	any /// for search purposes
 }
 
+/// Origin of the stored packet
+enum PacketOrigin
+{
+	client, /// originated from this client
+	broker /// originated from broker
+}
+
 /// Context for MQTT packet stored in Session
 struct PacketContext
 {
 	PacketType packetType; /// MQTT packet content
 	PacketState state; /// MQTT packet state
+	PacketOrigin origin; /// MQTT packet origin
 	public SysTime timestamp; /// Timestamp (for retry)
 	public uint attempt; /// Attempt (for retry)
 	/// MQTT packet id
@@ -128,6 +136,7 @@ struct PacketContext
 		this.state = ctx.state;
 		this.timestamp = ctx.timestamp;
 		this.attempt = ctx.attempt;
+		this.origin = ctx.origin;
 
 		switch (packetType)
 		{
@@ -172,26 +181,30 @@ struct Session
 	import vibe.core.sync;
 
 	/// Adds packet to Session
-	auto add(T)(auto ref T packet, PacketState state)
+	auto add(T)(auto ref T packet, PacketState state, PacketOrigin origin = PacketOrigin.client)
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
-		// assign packet id
-		static if (is(T == Publish))
-		{
-			if (state != PacketState.queuedQos0) packet.packetId = nextPacketId();
-			else if (_packets.full())
+		if (origin == PacketOrigin.client && !packet.packetId)
 			{
-				// session is full - drop QoS0 messages
-				version(MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
-				return cast(ushort)0;
+			// assign packet id
+			static if (is(T == Publish))
+			{
+				if (state != PacketState.queuedQos0) packet.packetId = nextPacketId();
+				else if (_packets.full())
+				{
+					// session is full - drop QoS0 messages
+					version(MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
+					return cast(ushort)0;
+				}
 			}
+			else packet.packetId = nextPacketId();
 		}
-		else packet.packetId = nextPacketId();
 
 		auto ctx = PacketContext();
 		ctx = packet;
 		ctx.timestamp = Clock.currTime;
 		ctx.state = state;
+		ctx.origin = origin;
 
 		_packets.put(ctx);
 
@@ -223,9 +236,12 @@ struct Session
 	/// Removes the stored PacketContext
 	void removeAt(size_t idx)
 	{
-		setUnused(_packets[idx].packetId);
-		if (idx == 0) _packets.popFront(); // to avoid copying
-		else _packets.removeAt(_packets[idx..idx+1]);
+		assert(idx < packetCount);
+
+		if (_packets[idx].origin == PacketOrigin.client)
+			setUnused(_packets[idx].packetId);
+
+		_packets.removeAt(_packets[idx..idx+1]);
 		event.emit();
 	}
 
@@ -236,14 +252,14 @@ struct Session
 	}
 
 	/// Finds package context stored in session
-	auto canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
+	auto canFind(ushort packetId, out PacketContext* ctx, out size_t idx, PacketState state = PacketState.any)
 	{
 		size_t i;
 		foreach(ref c; _packets)
 		{
 			if(c.packetId == packetId && (state == PacketState.any || c.state == state))
 			{
-				ctx = c;
+				ctx = &c;
 				idx = i;
 				return true;
 			}
@@ -260,7 +276,11 @@ struct Session
 
 	void popFront()
 	{
-		setUnused(_packets.front().packetId);
+		assert(!_packets.empty);
+
+		if (_packets.front.origin == PacketOrigin.client)
+			setUnused(_packets.front().packetId);
+
 		_packets.popFront();
 		event.emit();
 	}
@@ -501,6 +521,7 @@ class MqttClient
 		}
 	}
 
+	/// Response to connection request
 	void onConnAck(ConnAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onConnAck - %s", packet);
@@ -513,18 +534,22 @@ class MqttClient
 		else throw new Exception(format("Connection refused: %s", packet.returnCode));
 	}
 
+	/// Response to PingReq
 	void onPingResp(PingResp packet)
 	{
 		version(MqttDebug) logDebug("MQTT onPingResp - %s", packet);
 	}
 
+	// QoS1 handling
+
+	/// Publish request acknowledged - QoS1
 	void onPubAck(PubAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onPubAck - %s", packet);
 
-		PacketContext ctx;
+		PacketContext* ctx;
 		size_t idx;
-		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPuback)) // QoS 1
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPuback))
 		{
 			//treat the PUBLISH Packet as “unacknowledged” until corresponding PUBACK received
 			_session.removeAt(idx);
@@ -532,21 +557,55 @@ class MqttClient
 		else version (MqttDebug) logDiagnostic("MQTT onPubAck not found");
 	}
 
+	// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
+
+	/// Publish request acknowledged - QoS2
 	void onPubRec(PubRec packet)
 	{
 		version(MqttDebug) logDebug("MQTT onPubRec - %s", packet);
+
+		PacketContext* ctx;
+		size_t idx;
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPubrec))
+		{
+			//MUST send a PUBREL packet when it receives a PUBREC packet from the receiver.
+			ctx.state = PacketState.sendPubrel;
+			_session.emit();
+		}
+		else version (MqttDebug) logDiagnostic("MQTT onPubRec not found");
+	}
+
+	/// Confirmation that message was succesfully delivered (Sender side)
+	void onPubComp(PubComp packet)
+	{
+		version(MqttDebug) logDebug("MQTT onPubComp - %s", packet);
+		
+		PacketContext* ctx;
+		size_t idx;
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPubcomp))
+		{
+			//treat the PUBREL packet as “unacknowledged” until it has received the corresponding PUBCOMP packet from the receiver.
+			_session.removeAt(idx);
+		}
+		else version (MqttDebug) logDiagnostic("MQTT onPubComp not found");
 	}
 
 	void onPubRel(PubRel packet)
 	{
 		version(MqttDebug) logDebug("MQTT onPubRel - %s", packet);
+
+		PacketContext* ctx;
+		size_t idx;
+		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForPubrel))
+		{
+			//MUST respond to a PUBREL packet by sending a PUBCOMP packet containing the same Packet Identifier as the PUBREL.
+			ctx.state = PacketState.sendPubcomp;
+			_session.emit();
+		}
+		else version (MqttDebug) logDiagnostic("MQTT onPubRel not found");
 	}
 
-	void onPubComp(PubComp packet)
-	{
-		version(MqttDebug) logDebug("MQTT onPubComp - %s", packet);
-	}
-
+	/// Message was received from broker
 	void onPublish(Publish packet)
 	{
 		version(MqttDebug) logDebug("MQTT onPublish - %s", packet);
@@ -554,18 +613,20 @@ class MqttClient
 		//MUST respond with a PUBACK Packet containing the Packet Identifier from the incoming PUBLISH Packet
 		if (packet.header.qos == QoSLevel.QoS1)
 		{
-			auto ack = PubAck();
-			ack.packetId = packet.packetId;
-
-			this.send(ack);
+			_session.add(packet, PacketState.sendPuback, PacketOrigin.broker);
+		}
+		else if (packet.header.qos == QoSLevel.QoS2)
+		{
+			_session.add(packet, PacketState.sendPubrec, PacketOrigin.broker);
 		}
 	}
 
+	/// Message was succesfully delivered to broker
 	void onSubAck(SubAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onSubAck - %s", packet);
 
-		PacketContext ctx;
+		PacketContext* ctx;
 		size_t idx;
 		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForSuback))
 		{
@@ -573,11 +634,12 @@ class MqttClient
 		}
 	}
 
+	/// Confirmation that unsubscribe request was successfully delivered to broker
 	void onUnsubAck(UnsubAck packet)
 	{
 		version(MqttDebug) logDebug("MQTT onUnsubAck - %s", packet);
 
-		PacketContext ctx;
+		PacketContext* ctx;
 		size_t idx;
 		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForUnsuback))
 		{
@@ -585,6 +647,7 @@ class MqttClient
 		}
 	}
 
+	/// Client was disconnected from broker
 	void onDisconnect()
 	{
 		version(MqttDebug) logDebug("MQTT onDisconnect");
@@ -609,7 +672,7 @@ final:
 		import mqttd.serialization;
 		import std.range;
 
-		version(MqttDebug) logDebug("MQTT IN: %(%.02x %)", data);
+		version(MqttDebug) logDebugV("MQTT IN: %(%.02x %)", data);
 
 		if (_readBuffer.freeSpace < data.length) // ensure all fits to the buffer
 			_readBuffer.capacity = _readBuffer.capacity + data.length;
@@ -641,7 +704,7 @@ final:
 
 			with (PacketType)
 			{
-				switch (header.type)
+				final switch (header.type)
 				{
 					case CONNACK:
 						onConnAck(_packetBuffer.deserialize!ConnAck());
@@ -670,7 +733,13 @@ final:
 					case UNSUBACK:
 						onUnsubAck(_packetBuffer.deserialize!UnsubAck());
 						break;
-					default:
+					case CONNECT:
+					case SUBSCRIBE:
+					case UNSUBSCRIBE:
+					case PINGREQ:
+					case DISCONNECT:
+					case RESERVED1:
+					case RESERVED2:
 						throw new Exception(format("Unexpected packet type '%s'", header.type));
 				}
 			}
@@ -727,47 +796,129 @@ final:
 				auto ctx = &_session[idx];
 				final switch (ctx.state)
 				{
+					// QoS0 handling - S:Publish, S:forget
 					case PacketState.queuedQos0: // just send it
+						//Sender request QoS0
 						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.origin == PacketOrigin.client);
 						this.send(ctx.publish);
-						_session.removeAt(idx); // remove it from session
+						_session.removeAt(idx);
 						continue; //to use same idx again
+
+					// QoS1 handling - S:Publish, R:PubAck
 					case PacketState.queuedQos1:
+						//Sender request QoS1
 						//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
 						assert(ctx.packetType == PacketType.PUBLISH);
 						assert(ctx.publish.header.qos == QoSLevel.QoS1);
+						assert(ctx.origin == PacketOrigin.client);
 						this.send(ctx.publish);
-						ctx.state = PacketState.waitForPuback; // change to next state
+						ctx.state = PacketState.waitForPuback;
 						break;
-					case PacketState.queuedQos2:
-						//TODO
+					case PacketState.waitForPuback:
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS1);
+						assert(ctx.origin == PacketOrigin.client);
+						//TODO: Retry Publish
 						break;
 					case PacketState.sendPuback:
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS1);
+						assert(ctx.origin == PacketOrigin.broker);
+						auto ack = PubAck();
+						ack.packetId = ctx.publish.packetId;
+						this.send(ack);
+						_session.removeAt(idx); // remove it from session - QoS1 fullfiled
+						continue; //to use same idx again
+					
+					// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
+					case PacketState.queuedQos2:
+						//Sender request QoS2
+						//treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.client);
+						this.send(ctx.publish);
+						ctx.state = PacketState.waitForPubrec;
 						break;
-					case PacketState.sendPubcomp:
-						break;
-					case PacketState.sendPubrec:
+					case PacketState.waitForPubrec:
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.client);
+						//TODO: Retry Publish
 						break;
 					case PacketState.sendPubrel:
+						//Sender reaction to PubRec
+						//PUBREL packet MUST contain the same Packet Identifier as the original PUBLISH packet.
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.client);
+						PubRel pubRel;
+						pubRel.packetId = ctx.publish.packetId;
+						this.send(pubRel);
+						ctx.state = PacketState.waitForPubcomp;
 						break;
+					case PacketState.waitForPubcomp:
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.broker);
+						//TODO: Retry PubRel
+						break;
+					case PacketState.sendPubrec:
+						//Receiver reaction to Publish
+						//MUST respond with a PUBREC containing the Packet Identifier from the incoming PUBLISH Packet
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.broker);
+						PubRec pubRec;
+						pubRec.packetId = ctx.publish.packetId;
+						this.send(pubRec);
+						ctx.state = PacketState.waitForPubrel;
+						break;
+					case PacketState.waitForPubrel:
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.broker);
+						//TODO: Retry Pubrec
+						break;
+					case PacketState.sendPubcomp:
+						//Receiver reaction to Pubrel
+						//MUST respond to a PUBREL packet by sending a PUBCOMP packet containing the same Packet Identifier as the PUBREL.
+						assert(ctx.packetType == PacketType.PUBLISH);
+						assert(ctx.publish.header.qos == QoSLevel.QoS2);
+						assert(ctx.origin == PacketOrigin.broker);
+						PubComp pubComp;
+						pubComp.packetId = ctx.publish.packetId;
+						this.send(pubComp);
+						_session.removeAt(idx); // remove it from session - QoS2 fullfiled
+						continue; //to use same idx again
+
+					// Subscribe handling
 					case PacketState.queuedSubscribe:
 						assert(ctx.packetType == PacketType.SUBSCRIBE);
+						assert(ctx.origin == PacketOrigin.client);
 						this.send(ctx.subscribe);
 						ctx.state = PacketState.waitForSuback; // change to next state
 						break;
+					case PacketState.waitForSuback:
+						assert(ctx.packetType == PacketType.SUBSCRIBE);
+						assert(ctx.origin == PacketOrigin.client);
+						//TODO: Retry Subscribe
+						break;
+
+					// Unsubscribe handling
 					case PacketState.queuedUnsubscribe:
 						assert(ctx.packetType == PacketType.UNSUBSCRIBE);
+						assert(ctx.origin == PacketOrigin.client);
 						this.send(ctx.unsubscribe);
 						ctx.state = PacketState.waitForUnsuback; // change to next state
 						break;
-					case PacketState.waitForPuback:
-					case PacketState.waitForSuback:
 					case PacketState.waitForUnsuback:
-					case PacketState.waitForPubcomp:
-					case PacketState.waitForPubrec:
-					case PacketState.waitForPubrel:
-						//waiting for server response, nothing to do here
+						assert(ctx.packetType == PacketType.UNSUBSCRIBE);
+						assert(ctx.origin == PacketOrigin.client);
+						//TODO: Retry Unsubscribe
 						break;
+
 					case PacketState.any:
 						assert(0, "Invalid state");
 				}
@@ -787,7 +938,11 @@ final:
 
 		if (_con.connected)
 		{
-			version(MqttDebug) logDebug("MQTT OUT: %(%.02x %)", _sendBuffer.data);
+			version(MqttDebug)
+			{
+				logDebug("MQTT OUT: %s", msg);
+				logDebugV("MQTT OUT: %(%.02x %)", _sendBuffer.data);
+			}
 			_con.write(_sendBuffer.data);
 			return true;
 		}

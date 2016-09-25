@@ -8,9 +8,17 @@ vibe-mqtt
 
 **Depends on:** [vibe.d](https://github.com/rejectedsoftware/vibe.d)
 
-**Tested on:** [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled.
+**Tested on:**
+* [RabbitMQ](https://www.rabbitmq.com) with [MQTT](https://www.rabbitmq.com/mqtt.html) plugin enabled - **Doesn't support QoS2**
+* [Mosquitto](http://mosquitto.org/)
 
-**Status:** Supports QoS level 0 and QoS level 1 (QoS 2 TBD - [#12](https://github.com/tchaloupka/vibe-mqtt/issues/12))
+**Supported MQTT 3.1.1 features:**
+- [x] QoS0 and QoS1 messages
+- [x] Session state
+- [x] QoS2 messages
+- [ ] Last Will and Testament (LWT)
+- [ ] TLS/SSL
+- [ ] PingReq/PingResp
 
 Pull Requests are welcome, don't be shy ;)
 
