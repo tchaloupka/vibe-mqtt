@@ -180,7 +180,7 @@ struct Session
 			{
 				// session is full - drop QoS0 messages
 				version(MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
-				return 0;
+				return cast(ushort)0;
 			}
 		}
 		else packet.packetId = nextPacketId();
