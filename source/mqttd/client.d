@@ -515,7 +515,7 @@ class MqttClient
 			import std.array : array;
 
 			auto unsub = Unsubscribe();
-			unsub.topics = topics;
+			unsub.topics = topics.dup;
 
 			_session.add(unsub, PacketState.queuedUnsubscribe);
 		}

@@ -11,6 +11,7 @@ vibe-mqtt changelog
 - Fix #9 - Wait for ConnAck before sending pending messages
 - Fix #13 - Maintain client session state
 - Fix #12 - QoS 2 level support
+- Fix unsubscribe sending blank topics
 
 #### v0.1.7
 - Fix import in tests.d
