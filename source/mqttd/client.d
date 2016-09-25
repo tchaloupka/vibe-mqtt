@@ -222,6 +222,12 @@ struct Session
 		event.emit();
 	}
 
+	ref PacketContext opIndex(size_t idx)
+	{
+		assert(idx < packetCount);
+		return _packets[idx];
+	}
+
 	/// Finds package context stored in session
 	auto canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
 	{
@@ -694,17 +700,18 @@ final:
 
 			if (!_con.connected) break;
 
-			if (_session.packetCount > 0)
+			ushort idx;
+			while (idx < _session.packetCount)
 			{
 				//version(MqttDebug) logDebug("MQTT Packets in session: %s", _session.packetCount);
-				auto ctx = &_session.front();
+				auto ctx = &_session[idx];
 				final switch (ctx.state)
 				{
 					case PacketState.queuedQos0: // just send it
 						assert(ctx.packetType == PacketType.PUBLISH);
 						this.send(ctx.publish);
-						_session.popFront(); // remove it from session
-						break;
+						_session.removeAt(idx); // remove it from session
+						continue; //to use same idx again
 					case PacketState.queuedQos1:
 						//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
 						assert(ctx.packetType == PacketType.PUBLISH);
@@ -744,6 +751,7 @@ final:
 					case PacketState.any:
 						assert(0, "Invalid state");
 				}
+				idx++;
 			}
 		}
 

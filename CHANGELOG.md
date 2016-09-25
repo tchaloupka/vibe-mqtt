@@ -7,6 +7,7 @@ vibe-mqtt changelog
 - Fix #10 - check packetId usage in session
 - Fix #18 - unsubscribe is not implemented
 - Fix #4 - A way to block publish instead of throwing old messages
+- Fix #19 - Dispatcher only works with session.front packet
 
 #### v0.1.7
 - Fix import in tests.d
