@@ -67,6 +67,7 @@ struct Settings
 	string password = null; /// user password
 	int retryDelay = MQTT_RETRY_DELAY;
 	int retryAttempts = MQTT_RETRY_ATTEMPTS; /// how many times will client try to resend QoS1 and QoS2 packets
+	bool cleanSession = true; /// clean client and server session state on connect
 }
 
 /// MQTT packet state
@@ -383,6 +384,7 @@ class MqttClient
 
 			//cleanup before reconnects
 			_readBuffer.clear();
+			if (_settings.cleanSession ) _session.clear();
 
 			_con = connectTCP(_settings.host, _settings.port);
 			_listener = runTask(&listener);
@@ -393,7 +395,7 @@ class MqttClient
 
 			auto con = Connect();
 			con.clientIdentifier = _settings.clientId;
-			con.flags.cleanSession = true;
+			con.flags.cleanSession = _settings.cleanSession;
 			if (_settings.userName.length > 0)
 			{
 				con.flags.userName = true;

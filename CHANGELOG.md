@@ -9,6 +9,7 @@ vibe-mqtt changelog
 - Fix #4 - A way to block publish instead of throwing old messages
 - Fix #19 - Dispatcher only works with session.front packet
 - Fix #9 - Wait for ConnAck before sending pending messages
+- Fix #13 - Maintain client session state
 
 #### v0.1.7
 - Fix import in tests.d
