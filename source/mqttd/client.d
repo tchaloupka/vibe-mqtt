@@ -968,7 +968,7 @@ unittest
 
 	assert(s.packetCount == 1);
 
-	PacketContext ctx;
+	PacketContext* ctx;
 	size_t idx;
 	assert(id != 0);
 	assert(s.canFind(id, ctx, idx));
