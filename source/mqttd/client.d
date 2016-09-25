@@ -166,17 +166,22 @@ struct PacketContext
 /// MQTT session status holder
 struct Session
 {
+	import vibe.core.sync;
+
 	/// Adds packet to Session
 	auto add(T)(auto ref T packet, PacketState state)
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
-		// make place by oldest one removal
-		if (_packets.full()) _packets.popBack();
-
 		// assign packet id
 		static if (is(T == Publish))
 		{
 			if (state != PacketState.queuedQos0) packet.packetId = nextPacketId();
+			else if (_packets.full())
+			{
+				// session is full - drop QoS0 messages
+				version(MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
+				return 0;
+			}
 		}
 		else packet.packetId = nextPacketId();
 
@@ -187,14 +192,32 @@ struct Session
 
 		_packets.put(ctx);
 
+		event.emit();
+
 		return packet.packetId;
+	}
+
+	@disable this(this) {}
+
+	/// Waits until the session state is changed
+	auto wait()
+	{
+		return event.wait();
+	}
+
+	/// Waits until the session state is changed or timeout is reached
+	auto wait(Duration timeout)
+	{
+		return event.wait(timeout, event.emitCount);
 	}
 
 	/// Removes the stored PacketContext
 	void removeAt(size_t idx)
 	{
 		setUnused(_packets[idx].packetId);
-		_packets.removeAt(_packets[idx..idx+1]);
+		if (idx == 0) _packets.popFront(); // to avoid copying
+		else _packets.removeAt(_packets[idx..idx+1]);
+		event.emit();
 	}
 
 	/// Finds package context stored in session
@@ -224,28 +247,20 @@ struct Session
 	{
 		setUnused(_packets.front().packetId);
 		_packets.popFront();
+		event.emit();
 	}
 
-	@safe @nogc pure nothrow:
-
-	/// Clears cached messages
-	void clear()
-	{
-		_idUsage = 0;
-		_packets.clear();
-	}
-
-	/// Number of packets to process
-	@property auto packetCount() const
-	{
-		return _packets.length;
-	}
-
-	/// Gets next packet id
+	/// Gets next packet id. If the session is full it won't return till there is free space again
 	@property auto nextPacketId()
 	{
 		do
 		{
+			if (_packets.full)
+			{
+				this.wait();
+				continue;
+			}
+
 			//packet id can't be 0!
 			_packetId = cast(ushort)((_packetId % MQTT_SESSION_MAX_PACKETS) != 0 ? _packetId + 1 : 1);
 		}
@@ -254,6 +269,30 @@ struct Session
 		setUsed(_packetId);
 
 		return _packetId;
+	}
+
+nothrow:
+
+	/// Clears cached messages
+	void clear()
+	{
+		_idUsage = 0;
+		_packets.clear();
+		event.emit();
+	}
+
+	@property private auto event()
+	{
+		static ManualEvent _event;
+		if (_event is null) _event = createManualEvent();
+		return _event;
+	}
+
+@safe @nogc pure:
+	/// Number of packets to process
+	@property auto packetCount() const
+	{
+		return _packets.length;
 	}
 
 package:
@@ -397,8 +436,6 @@ class MqttClient
 			_session.add(pub, qos == QoSLevel.QoS0 ?
 				PacketState.queuedQos0 :
 				(qos == QoSLevel.QoS1 ? PacketState.queuedQos1 : PacketState.queuedQos2));
-
-			_dispatcher.send(true);
 		}
 
 		/**
@@ -418,7 +455,6 @@ class MqttClient
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
 
 			_session.add(sub, PacketState.waitForSuback);
-			_dispatcher.send(true);
 		}
 
 		/**
@@ -432,12 +468,11 @@ class MqttClient
 		{
 			import std.algorithm : map;
 			import std.array : array;
-			
+
 			auto unsub = Unsubscribe();
 			unsub.topics = topics;
-			
+
 			_session.add(unsub, PacketState.waitForUnsuback);
-			_dispatcher.send(true);
 		}
 	}
 
@@ -467,8 +502,8 @@ class MqttClient
 		{
 			//treat the PUBLISH Packet as “unacknowledged” until corresponding PUBACK received
 			_session.removeAt(idx);
-			_dispatcher.send(true);
 		}
+		else version (MqttDebug) logDiagnostic("MQTT onPubAck not found");
 	}
 
 	void onPubRec(PubRec packet)
@@ -509,7 +544,6 @@ class MqttClient
 		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForSuback))
 		{
 			_session.removeAt(idx);
-			_dispatcher.send(true);
 		}
 	}
 
@@ -522,7 +556,6 @@ class MqttClient
 		if(_session.canFind(packet.packetId, ctx, idx, PacketState.waitForUnsuback))
 		{
 			_session.removeAt(idx);
-			_dispatcher.send(true);
 		}
 	}
 
@@ -654,13 +687,13 @@ final:
 
 		version(MqttDebug) logDebug("MQTT Entering dispatch loop");
 
-		bool exit = false;
 		bool con = true;
-		while (_con.connected && !exit)
+		while (true)
 		{
-			// wait for info about change or timeout
-			receiveTimeout(_settings.retryDelay.msecs,
-				(bool msg) { exit = !msg; });
+			// wait for session state change or timeout
+			_session.wait(_settings.retryDelay.msecs);
+
+			if (!_con.connected) break;
 
 			if (_session.packetCount > 0)
 			{

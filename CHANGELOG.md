@@ -6,6 +6,7 @@ vibe-mqtt changelog
 - Fix unittest imports
 - Fix #10 - check packetId usage in session
 - Fix #18 - unsubscribe is not implemented
+- Fix #4 - A way to block publish instead of throwing old messages
 
 #### v0.1.7
 - Fix import in tests.d
