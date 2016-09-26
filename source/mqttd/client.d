@@ -49,13 +49,13 @@ import std.traits;
 
 enum MQTT_BROKER_DEFAULT_PORT = 1883u;
 enum MQTT_BROKER_DEFAULT_SSL_PORT = 8883u;
-enum MQTT_SESSION_MAX_PACKETS = ushort.max;
+enum MQTT_SESSION_SIZE = 100_000u; /// maximal number of packets storable in the session
+enum MQTT_MAX_PACKET_ID = ushort.max; /// maximal packet id (0..65536) - defined by MQTT protocol
 enum MQTT_CLIENT_ID = "vibe-mqtt"; /// default client identifier
 enum MQTT_RETRY_DELAY = 10_000u; /// delay for retry publish, subscribe and unsubscribe for QoS Level 1 or 2 [ms]
 enum MQTT_RETRY_ATTEMPTS = 3u; /// max publish, subscribe and unsubscribe retry for QoS Level 1 or 2
 
-
-alias SessionContainer = FixedRingBuffer!(PacketContext, MQTT_SESSION_MAX_PACKETS);
+alias SessionContainer = FixedRingBuffer!(PacketContext);
 
 /// MqttClient settings
 struct Settings
@@ -68,6 +68,7 @@ struct Settings
 	int retryDelay = MQTT_RETRY_DELAY;
 	int retryAttempts = MQTT_RETRY_ATTEMPTS; /// how many times will client try to resend QoS1 and QoS2 packets
 	bool cleanSession = true; /// clean client and server session state on connect
+	size_t sessionSize = MQTT_SESSION_SIZE; /// number of packets storable in the session (default is 65535)
 }
 
 /// MQTT packet state
@@ -180,29 +181,44 @@ struct Session
 {
 	import vibe.core.sync;
 
-	/// Adds packet to Session
+	this(Settings settings)
+	{
+		if (_packets.capacity != settings.sessionSize)
+			_packets = SessionContainer(settings.sessionSize);
+		setUsed(0);
+	}
+
+	/**
+	 * Adds packet to Session
+	 * If the session is full the call will be blocked until there is space again.
+	 * Also if there is no free packetId to use, it will be blocked until it is.
+	 * 
+	 * Params:
+	 * 		packet = packet to be sent (can be Publish, Subscribe or Unsubscribe)
+	 * 		state = initial packet state
+	 * 		origin = origin of the packet (session stores control packets from broker too)
+	 */
 	auto add(T)(auto ref T packet, PacketState state, PacketOrigin origin = PacketOrigin.client)
 		if (is(T == Publish) || is(T == Subscribe) || is(T == Unsubscribe))
 	{
+		if (_packets.full())
+		{
+			if (state == PacketState.queuedQos0)
+			{
+				version (MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
+				return cast(ushort)0;
+			}
+			else
+			{
+				version (MqttDebug) logDiagnostic("MQTT SessionFull (packet#: %s) - waiting", packetCount);
+				this.wait();
+			}
+		}
+
 		if (origin == PacketOrigin.client && !packet.packetId)
 		{
 			// assign packet id
-			static if (is(T == Publish))
-			{
-				if (state != PacketState.queuedQos0) packet.packetId = nextPacketId();
-				else if (_packets.full())
-				{
-					// session is full - drop QoS0 messages
-					version (MqttDebug) logDiagnostic("MQTT SessionFull - dropping QoS0 publish msg");
-					return cast(ushort)0;
-				}
-			}
-			else packet.packetId = nextPacketId();
-		}
-		else if (_packets.full())
-		{
-			version (MqttDebug) logDiagnostic("MQTT SessionFull - waiting");
-			this.wait();
+			packet.packetId = nextPacketId();
 		}
 
 		auto ctx = PacketContext();
@@ -292,20 +308,29 @@ struct Session
 
 	/// Gets next packet id. If the session is full it won't return till there is free space again
 	@property auto nextPacketId()
+	out (result)
 	{
+		assert(result, "packet id can't be 0!");
+	}
+	body
+	{
+		import std.algorithm : any;
+
 		do
 		{
-			if (_packets.full)
+			if (!_idUsage[].any!(a => a != size_t.max)())
 			{
-				version (MqttDebug) logDiagnostic("MQTT SessionFull - waiting");
+				version (MqttDebug) logDiagnostic("MQTT all packet ids in use (packet#: %s) - waiting", packetCount);
 				this.wait();
 				continue;
 			}
 
 			//packet id can't be 0!
-			_packetId = cast(ushort)((_packetId % MQTT_SESSION_MAX_PACKETS) != 0 ? _packetId + 1 : 1);
+			_packetId = cast(ushort)((_packetId % MQTT_MAX_PACKET_ID) != 0 ? _packetId + 1 : 1);
 		}
 		while (isUsed(_packetId));
+
+		version (MqttDebug) if (_packetId == 1) logDiagnostic("ID Overflow");
 
 		setUsed(_packetId);
 
@@ -317,7 +342,7 @@ nothrow:
 	/// Clears cached messages
 	void clear()
 	{
-		_idUsage = 0;
+		_idUsage = 0; setUsed(0);
 		_packets.clear();
 		event.emit();
 	}
@@ -345,18 +370,19 @@ package:
 	}
 	pragma(inline, true) auto setUnused(ushort id)
 	{
+		assert(id != 0);
 		if (id == 0) return;
 		assert(isUsed(id));
 		_idUsage[getIdx(id)] ^= getIdxValue(id);
 	}
-	pragma(inline, true) auto getIdx(ushort id) { return id / 64; }
-	pragma(inline, true) auto getIdxValue(ushort id) { return cast(size_t)(1uL << (id % 64)); }
+	pragma(inline, true) auto getIdx(ushort id) { return id / (size_t.sizeof*8); }
+	pragma(inline, true) auto getIdxValue(ushort id) { return cast(size_t)(1uL << (id % (size_t.sizeof*8))); }
 
 private:
 	/// Packets to handle
-	SessionContainer _packets;
+	SessionContainer _packets = SessionContainer(MQTT_SESSION_SIZE);
 	ushort _packetId = 0u;
-	size_t[1024] _idUsage; //1024 * 64 = 65536 => id usage flags storage
+	size_t[(MQTT_MAX_PACKET_ID+1)/(size_t.sizeof*8)] _idUsage; //1024 * 64 = 65536 => id usage flags storage
 }
 
 unittest
@@ -374,6 +400,10 @@ unittest
 	s.setUnused(64);
 	assert(!s.isUsed(64));
 	assert(s.isUsed(1));
+	s.setUnused(1);
+
+	foreach(i; 0..size_t.sizeof*8) s.setUsed(cast(ushort)i);
+	assert(s._idUsage[0] == size_t.max);
 }
 
 /// MQTT Client implementation
@@ -391,6 +421,7 @@ class MqttClient
 			_settings.clientId = Socket.hostName;
 
 		_readBuffer.capacity = 4 * 1024;
+		_session = Session(settings);
 		_conAckTimer = createTimer(
 			{
 				version (MqttDebug) logWarn("MQTT ConAck not received, disconnecting");
