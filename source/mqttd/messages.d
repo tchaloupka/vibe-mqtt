@@ -635,14 +635,25 @@ struct PubAck
 
 	/// This contains the Packet Identifier from the PUBLISH Packet that is being acknowledged.
 	ushort packetId;
+
+	this(ushort packetId)
+	{
+		this.packetId = packetId;
+	}
 }
 
 /// A PUBREC Packet is the response to a PUBLISH Packet with QoS 2. It is the second packet of the QoS 2 protocol exchange.
 struct PubRec
 {
 	FixedHeader header = FixedHeader(PacketType.PUBREC, 0, 2);
+
 	/// This contains the Packet Identifier from the PUBLISH Packet that is being acknowledged.
 	ushort packetId;
+
+	this(ushort packetId)
+	{
+		this.packetId = packetId;
+	}
 }
 
 /// A PUBREL Packet is the response to a PUBREC Packet. It is the third packet of the QoS 2 protocol exchange.
@@ -652,6 +663,11 @@ struct PubRel
 
 	/// This contains the same Packet Identifier as the PUBREC Packet that is being acknowledged.
 	ushort packetId;
+
+	this(ushort packetId)
+	{
+		this.packetId = packetId;
+	}
 }
 
 /// The PUBCOMP Packet is the response to a PUBREL Packet. It is the fourth and final packet of the QoS 2 protocol exchange.
@@ -661,6 +677,11 @@ struct PubComp
 
 	/// This contains the same Packet Identifier as the PUBREC Packet that is being acknowledged.
 	ushort packetId;
+
+	this(ushort packetId)
+	{
+		this.packetId = packetId;
+	}
 }
 
 /**
