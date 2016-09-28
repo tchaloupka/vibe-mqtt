@@ -12,7 +12,8 @@ vibe-mqtt changelog
 - Fix #13 - Maintain client session state
 - Fix #12 - QoS 2 level support
 - Fix unsubscribe sending blank topics
-- Added possibility to set size of send and wait queues
+- Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
+- Various refactorings and optimizations
 
 #### v0.1.7
 - Fix import in tests.d
