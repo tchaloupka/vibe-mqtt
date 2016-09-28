@@ -298,14 +298,17 @@ private struct SessionQueue(Flag!"send" send)
 	 * 		packet = packet to be sent (can be Publish, Subscribe or Unsubscribe)
 	 * 		state = initial packet state
 	 * 		origin = origin of the packet (session stores control packets from broker too)
+	 * 
+	 * Returns:
+	 * 		Assigned packetId (0 if QoS0 is set). If message originates from broker, it keeps the original..
 	 */
-	auto add(Publish packet, PacketState state, PacketOrigin origin = PacketOrigin.client)
+	ushort add(Publish packet, PacketState state, PacketOrigin origin = PacketOrigin.client)
 	{
 		return add(MessageContext(packet, state, origin));
 	}
 
 	/// ditto
-	auto add(MessageContext ctx)
+	ushort add(MessageContext ctx)
 	in
 	{
 		assert(ctx.packetId || ctx.state == PacketState.queuedQos0, "PacketId must be set");
