@@ -1,3 +1,14 @@
+#!/usr/bin/env dub
+/+ dub.json:
+{
+    "name": "serialization",
+    "dependencies": {
+        "vibe-mqtt": {"version": "~master", "path": "../../"},
+        "msgpack-d": "~>1.0.0-beta"
+    },
+    "versions": ["VibeCustomMain"]
+}
++/
 import std.datetime;
 import std.conv;
 import std.array;

@@ -1,3 +1,14 @@
+#!/usr/bin/env dub
+/+ dub.json:
+{
+    "name": "issue6",
+    "description": "Test for issue #6",
+    "dependencies": {
+        "vibe-mqtt": {"version": "~master", "path": "../../"}
+    },
+    "versions": ["VibeDefaultMain", "MqttDebug"]
+}
++/
 import mqttd;
 
 shared static this()
