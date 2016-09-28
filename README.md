@@ -2,7 +2,7 @@
 
 vibe-mqtt
 =========
-[MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written in D.
+[MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written completely in D.
 
 **MQTT protocol version supported:** 3.1.1
 
@@ -13,12 +13,19 @@ vibe-mqtt
 * [Mosquitto](http://mosquitto.org/)
 
 **Supported MQTT 3.1.1 features:**
-- [x] QoS0 and QoS1 messages
-- [x] Session state
-- [x] QoS2 messages
-- [ ] Last Will and Testament (LWT)
-- [ ] TLS/SSL
-- [ ] PingReq/PingResp
+- [x] QoS0, QoS1 and QoS2 messages handling
+- [x] Authentication
+- [x] Session state storage (currently in memory only - #20)
+- [x] Sending retain messages
+- [x] Async API (publish blocks if send queue is full)
+- [x] Data agnostic
+- [x] Message ordering
+- [ ] On subscribe topics validation (#17)
+- [ ] Last Will and Testament (LWT) ( #21)
+- [ ] PingReq/PingResp (#11)
+- [ ] Delivery retry (#14)
+- [ ] Auto reconnect to broker (#15)
+- [ ] TLS/SSL (#16)
 
 Pull Requests are welcome, don't be shy ;)
 
