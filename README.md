@@ -15,17 +15,17 @@ vibe-mqtt
 **Supported MQTT 3.1.1 features:**
 - [x] QoS0, QoS1 and QoS2 messages handling
 - [x] Authentication
-- [x] Session state storage (currently in memory only - #20)
+- [x] Session state storage (currently in memory only - [#20](https://github.com/tchaloupka/vibe-mqtt/issues/20))
 - [x] Sending retain messages
 - [x] Async API (publish blocks if send queue is full)
 - [x] Data agnostic
 - [x] Message ordering
-- [ ] On subscribe topics validation (#17)
-- [ ] Last Will and Testament (LWT) ( #21)
-- [ ] PingReq/PingResp (#11)
-- [ ] Delivery retry (#14)
-- [ ] Auto reconnect to broker (#15)
-- [ ] TLS/SSL (#16)
+- [ ] On subscribe topics validation ([#17](https://github.com/tchaloupka/vibe-mqtt/issues/17))
+- [ ] Last Will and Testament (LWT) ([#21](https://github.com/tchaloupka/vibe-mqtt/issues/21))
+- [ ] PingReq/PingResp ([#11](https://github.com/tchaloupka/vibe-mqtt/issues/11))
+- [ ] Delivery retry ([#14](https://github.com/tchaloupka/vibe-mqtt/issues/22))
+- [ ] Auto reconnect to broker ([#15](https://github.com/tchaloupka/vibe-mqtt/issues/22))
+- [ ] TLS/SSL ([#16](https://github.com/tchaloupka/vibe-mqtt/issues/22))
 
 Pull Requests are welcome, don't be shy ;)
 
