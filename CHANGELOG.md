@@ -13,6 +13,7 @@ vibe-mqtt changelog
 - Fix #12 - QoS 2 level support
 - Fix unsubscribe sending blank topics
 - Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
+- Added support to set KeepAlive interval for sending control packets to determine connection state with the broker (PingReq/PingResp)
 - Various refactorings and optimizations
 
 #### v0.1.7

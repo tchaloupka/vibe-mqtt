@@ -77,6 +77,7 @@ struct Settings
 	bool cleanSession = true; /// clean client and server session state on connect
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
+	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default). 
 }
 
 /**
@@ -571,6 +572,7 @@ class MqttClient
 			auto con = Connect();
 			con.clientIdentifier = _settings.clientId;
 			con.flags.cleanSession = _settings.cleanSession;
+			con.keepAlive = _settings.keepAlive;
 			if (_settings.userName.length > 0)
 			{
 				con.flags.userName = true;
@@ -591,10 +593,10 @@ class MqttClient
 		in { assert(!(_con is null)); }
 		body
 		{
-			version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
-
 			if (_con.connected)
 			{
+				version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
+
 				this.send(Disconnect());
 				_con.flush();
 				_con.close();
@@ -605,6 +607,7 @@ class MqttClient
 				if(Task.getThis !is _listener)
 					_listener.join;
 			}
+			else version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
 		}
 
 		/**
@@ -657,12 +660,14 @@ class MqttClient
 			sub.packetId = _subId = PacketIdGenerator.get.nextPacketId();
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
 
-			this.send(sub);
-			_subAckTimer = setTimer(dur!"msecs"(1_000),
-				{
-					logError("MQTT Server didn't respond with SUBACK - disconnecting");
-					this.disconnect;
-				});
+			if (this.send(sub))
+			{
+				_subAckTimer = setTimer(dur!"msecs"(1_000),
+					{
+						logError("MQTT Server didn't respond with SUBACK - disconnecting");
+						this.disconnect;
+					});
+			}
 		}
 
 		/**
@@ -681,12 +686,14 @@ class MqttClient
 			unsub.packetId = _unsubId = PacketIdGenerator.get.nextPacketId();
 			unsub.topics = topics.dup;
 
-			this.send(unsub);
-			_unsubAckTimer = setTimer(dur!"msecs"(1_000),
-				{
-					logError("MQTT Server didn't respond with UNSUBACK - disconnecting");
-					this.disconnect;
-				});
+			if (this.send(unsub))
+			{
+				_unsubAckTimer = setTimer(dur!"msecs"(1_000),
+					{
+						logError("MQTT Server didn't respond with UNSUBACK - disconnecting");
+						this.disconnect;
+					});
+			}
 		}
 	}
 
@@ -699,6 +706,21 @@ class MqttClient
 		{
 			version(MqttDebug) logDebug("MQTT Connection accepted");
 			_conAckTimer.stop();
+			if (_settings.keepAlive)
+			{
+				_pingReqTimer = setTimer(dur!"seconds"(_settings.keepAlive),
+					{
+						if (this.send(PingReq()))
+						{
+							if (_pingRespTimer && _pingRespTimer.pending) return;
+							_pingRespTimer = setTimer(dur!"seconds"(10),
+							{
+								logError("MQTT no PINGRESP received - disconnecting");
+								this.disconnect();
+							}, false);
+						}
+					}, true);
+			}
 			_session.sendQueue.emit();
 		}
 		else throw new Exception(format("Connection refused: %s", packet.returnCode));
@@ -707,7 +729,9 @@ class MqttClient
 	/// Response to PingReq
 	void onPingResp(PingResp packet)
 	{
-		version(MqttDebug) logDebug("MQTT onPingResp - %s", packet);
+		version(MqttDebug) logDebug("MQTT Received PINGRESP - %s", packet);
+
+		if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop;
 	}
 
 	// QoS1 handling
@@ -834,6 +858,14 @@ class MqttClient
 	void onDisconnect()
 	{
 		version(MqttDebug) logDebug("MQTT onDisconnect");
+
+		if (_con.connected) _con.close();
+
+		_session.inflightQueue.emit();
+		_session.sendQueue.emit();
+
+		if (_pingReqTimer && _pingReqTimer.pending) _pingReqTimer.stop();
+		if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop();
 	}
 
 private:
@@ -845,7 +877,7 @@ private:
 	FixedRingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
 	bool _onDisconnectCalled;
-	Timer _conAckTimer, _subAckTimer, _unsubAckTimer;
+	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer;
 	ushort _subId, _unsubId;
 
 final:
