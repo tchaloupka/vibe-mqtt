@@ -72,8 +72,8 @@ struct Settings
 	string clientId = MQTT_DEFAULT_CLIENT_ID; /// Client Id to identify within message broker (must be unique)
 	string userName = null; /// optional user name to login with
 	string password = null; /// user password
-	int retryDelay = MQTT_DEFAULT_RETRY_DELAY; /// retry interval to resend publish (QoS 1 or 2), subscribe and unsubscribe messages [ms]
-	int retryAttempts = MQTT_DEFAULT_RETRY_ATTEMPTS; /// how many times will client try to resend QoS1 and QoS2 packets
+	int retryDelay = MQTT_DEFAULT_RETRY_DELAY; /// retry interval to resend publish QoS 1 and 2 messages [ms]
+	int retryAttempts = MQTT_DEFAULT_RETRY_ATTEMPTS; /// how many times will client try to resend QoS1 and QoS2 messages
 	bool cleanSession = true; /// clean client and server session state on connect
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
@@ -658,8 +658,11 @@ class MqttClient
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
 
 			this.send(sub);
-			_subAckTimer = setTimer(dur!"msecs"(_settings.retryDelay),
-				{this.send(sub);}, true);
+			_subAckTimer = setTimer(dur!"msecs"(1_000),
+				{
+					logError("MQTT Server didn't respond with SUBACK - disconnecting");
+					this.disconnect;
+				});
 		}
 
 		/**
@@ -679,8 +682,11 @@ class MqttClient
 			unsub.topics = topics.dup;
 
 			this.send(unsub);
-			_unsubAckTimer = setTimer(dur!"msecs"(_settings.retryDelay),
-				{this.send(unsub);}, true);
+			_unsubAckTimer = setTimer(dur!"msecs"(1_000),
+				{
+					logError("MQTT Server didn't respond with UNSUBACK - disconnecting");
+					this.disconnect;
+				});
 		}
 	}
 
