@@ -37,6 +37,8 @@ import mqttd.traits;
 
 debug import std.stdio;
 
+@safe:
+
 auto serialize(R, T)(auto ref R output, ref T item) if (canSerializeTo!(R))
 {
 	auto ser = serializer(output);
@@ -145,7 +147,7 @@ struct Serializer(R) if (canSerializeTo!(R))
 			enforce(val.length <= 0xFF, "String too long: ", val);
 
 			write((cast(ushort)val.length));
-			put(cast(ubyte[])val);
+			put(val.representation);
 		}
 		else static if (isDynamicArray!T)
 		{
@@ -237,7 +239,7 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
 		import std.traits : isDynamicArray;
 
 		auto handled = true;
-		T res = void;
+		T res;
 
 		static if (is(T == FixedHeader)) // first to avoid implicit conversion to ubyte
 		{
@@ -269,14 +271,14 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
 		}
 		else static if (is(T:string))
 		{
-			import std.array;
+			import std.array : array;
 			import std.algorithm : map;
 
 			auto length = read!ushort();
 			static if(hasSlicing!R)
 			{
 				//writeln(cast(string)_input[0..length]);
-				res = cast(string)_input[0..length];
+				res = (cast(char[])_input[0..length]).idup;
 				_remainingLen -= length;
 				_input = _input.length > length ? _input[length..$] : R.init;
 			}

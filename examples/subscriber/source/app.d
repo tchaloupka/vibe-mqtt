@@ -10,7 +10,6 @@ shared static this()
 {
 	import vibe.core.log : setLogFormat, FileLogger;
 	import vibe.core.core : sleep, runTask;
-	import core.time;
 
 	class Subscriber : MqttClient
 	{
@@ -23,7 +22,7 @@ shared static this()
 		{
 			super.onPublish(packet);
 
-			writeln(packet.topic, ": ", cast(string)packet.payload);
+			writeln(packet.topic, ": ", (cast(char[])packet.payload).idup);
 		}
 
 		override void onConnAck(ConnAck packet)

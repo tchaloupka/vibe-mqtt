@@ -34,6 +34,8 @@ import std.traits : isDynamicArray, isIntegral;
 
 import mqttd.messages;
 
+@safe:
+
 /// Is one of Mqtt packet types?
 enum bool isMqttPacket(T) = is(T == Connect) || is(T == ConnAck)
 	|| is(T == Publish) || is(T == PubAck) || is(T == PubRec) || is(T == PubRel) || is(T == PubComp)

@@ -37,6 +37,8 @@ debug import std.stdio;
 
 import mqttd.traits;
 
+@safe:
+
 /**
  * Exception thrown when package format is somehow malformed
  */

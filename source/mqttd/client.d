@@ -43,9 +43,11 @@ import vibe.core.task;
 import vibe.core.concurrency;
 import vibe.utils.array : FixedRingBuffer;
 
+import std.algorithm : any, map;
+import std.array : array;
 import std.datetime;
 import std.exception;
-import std.string : format;
+import std.string : format, representation;
 import std.traits;
 import std.typecons : Flag, Yes, No;
 
@@ -53,8 +55,8 @@ import std.typecons : Flag, Yes, No;
 enum MQTT_MAX_PACKET_ID = ushort.max; /// maximal packet id (0..65536) - defined by MQTT protocol
 
 // default settings
-enum MQTT_DEFAULT_BROKER_PORT = 1883u;
-enum MQTT_DEFAULT_BROKER_SSL_PORT = 8883u;
+enum MQTT_DEFAULT_BROKER_PORT = 1883u; /// default mqtt broker port
+enum MQTT_DEFAULT_BROKER_SSL_PORT = 8883u; /// default mqtt broker ssl port
 enum MQTT_DEFAULT_SENDQUEUE_SIZE = 1000u; /// maximal number of packets stored in queue to send
 enum MQTT_DEFAULT_INFLIGHTQUEUE_SIZE = 10u; /// maximal number of packets which can be processed at the same time
 enum MQTT_DEFAULT_CLIENT_ID = "vibe-mqtt"; /// default client identifier
@@ -93,7 +95,7 @@ private:
 	{
 		_event = createManualEvent();
 		setUsed(0);
-	};
+	}
 
 	// TLS flag, each thread has its own
 	static bool instantiated_;
@@ -111,7 +113,7 @@ private:
 public:
 
 	/// Instance of Packet ID generator
-	@property static PacketIdGenerator get()
+	@property static PacketIdGenerator get() @trusted
 	{
 		// Since every thread has its own instantiated_ variable,
 		// there is no need for synchronization here.
@@ -129,6 +131,8 @@ public:
 		return instance_;
 	}
 
+@safe:
+
 	/// Gets next packet id. If the session is full it won't return till there is free space again
 	@property auto nextPacketId()
 	out (result)
@@ -138,8 +142,6 @@ public:
 	}
 	body
 	{
-		import std.algorithm : any;
-
 		do
 		{
 			if (!_idUsage[].any!(a => a != size_t.max)())
@@ -161,8 +163,11 @@ public:
 		return _packetId;
 	}
 
+	/// Is packet id currently used?
 	pragma(inline) auto isUsed(ushort id) { return (_idUsage[getIdx(id)] & getIdxValue(id)) == getIdxValue(id); }
-	pragma(inline) auto setUsed(ushort id)
+
+	/// Sets packet id as used
+	pragma(inline) void setUsed(ushort id)
 	{
 		assert(!isUsed(id));
 		assert(_event !is null);
@@ -171,7 +176,9 @@ public:
 		version (unittest) {} //HACK: For some reason unittest will segfault when emiting
 		else _event.emit();
 	}
-	pragma(inline) auto setUnused(ushort id)
+
+	/// Sets packet id as unused
+	pragma(inline) void setUnused(ushort id)
 	{
 		assert(id != 0);
 		assert(isUsed(id));
@@ -226,7 +233,7 @@ enum PacketOrigin
 }
 
 /// Context for MQTT packet stored in Session
-struct MessageContext
+private @safe struct MessageContext
 {
 	~this()
 	{
@@ -246,7 +253,7 @@ struct MessageContext
 			this.message.packetId = PacketIdGenerator.get.nextPacketId();
 	}
 
-	this(this)
+	this (this)
 	{
 		if (refcount !is null) *refcount += 1;
 	}
@@ -277,7 +284,7 @@ private:
 }
 
 /// Queue storage helper for session
-private struct SessionQueue(Flag!"send" send)
+private @safe struct SessionQueue(Flag!"send" send)
 {
 	this(Settings settings)
 	{
@@ -395,33 +402,31 @@ private struct SessionQueue(Flag!"send" send)
 		_event.emit();
 	}
 
-	ref MessageContext opIndex(size_t idx)
-	{
-		assert(idx < this.length);
-		return _packets[idx];
-	}
-
 	/// Finds package context stored in session
-	auto canFind(ushort packetId, out MessageContext* ctx, out size_t idx, PacketState[] state...)
+	auto canFind(ushort packetId, out size_t idx, PacketState[] state...)
 	{
-		import std.algorithm;
-
-		size_t i;
-		foreach(ref c; _packets)
+		import alg = std.algorithm : canFind;
+		foreach (i, ref c; _packets)
 		{
-			if(c.packetId == packetId && (!state.length || std.algorithm.canFind!(a => a == c.state)(state)))
+			if (c.packetId == packetId && (!state.length || alg.canFind!(a => a == c.state)(state)))
 			{
-				ctx = &c;
 				idx = i;
 				return true;
 			}
-			++i;
 		}
 
 		return false;
 	}
 
-	@property ref MessageContext front()
+nothrow:
+
+	ref MessageContext opIndex(size_t idx) @nogc pure
+	{
+		assert(idx < this.length);
+		return _packets[idx];
+	}
+
+	@property ref MessageContext front() @nogc pure
 	{
 		return _packets.front();
 	}
@@ -433,23 +438,21 @@ private struct SessionQueue(Flag!"send" send)
 		_event.emit();
 	}
 
-	@property bool empty() const
+	@property bool empty() const @nogc pure
 	{
 		return _packets.empty;
 	}
 
-	@property bool full() const
+	@property bool full() const @nogc pure
 	{
 		return _packets.full;
 	}
 
 	/// Number of packets to process
-	@property auto length() const @safe @nogc pure
+	@property auto length() const @nogc pure
 	{
 		return _packets.length;
 	}
-
-nothrow:
 
 	/// Clears cached messages
 	void clear()
@@ -464,7 +467,7 @@ private:
 }
 
 /// MQTT session status holder
-struct Session
+private @safe struct Session
 {
 	alias InflightQueue = SessionQueue!(No.send);
 	alias SendQueue = SessionQueue!(Yes.send);
@@ -487,7 +490,7 @@ struct Session
 		return _sendQueue;
 	}
 
-	auto clear()
+	void clear()
 	{
 		this._inflightQueue.clear();
 		this._sendQueue.clear();
@@ -509,12 +512,13 @@ unittest
 
 	assert(s.sendQueue.length == 1);
 
-	MessageContext* ctx;
 	size_t idx;
 	assert(id != 0);
-	assert(s.sendQueue.canFind(id, ctx, idx));
+	assert(s.sendQueue.canFind(id, idx));
 	assert(idx == 0);
 	assert(s.sendQueue.length == 1);
+
+	auto ctx = s.sendQueue[idx];
 
 	assert(ctx.state == PacketState.queuedQos1);
 	assert(ctx.attempt == 0);
@@ -526,7 +530,7 @@ unittest
 }
 
 /// MQTT Client implementation
-class MqttClient
+@safe class MqttClient
 {
 	import std.array : Appender;
 	import vibe.core.core : Timer, createTimer, setTimer;
@@ -541,7 +545,7 @@ class MqttClient
 
 		_readBuffer.capacity = 4 * 1024;
 		_session = Session(settings);
-		_conAckTimer = createTimer(
+		_conAckTimer = createTimer(()
 			{
 				logWarn("MQTT ConAck not received, disconnecting");
 				this.disconnect();
@@ -635,7 +639,8 @@ class MqttClient
 			pub.header.qos = qos;
 			pub.header.retain = retain;
 			pub.topic = topic;
-			pub.payload = cast(ubyte[]) payload;
+			static if (isSomeString!T) pub.payload = payload.representation.dup;
+			else pub.payload = payload;
 
 			//TODO: Maybe send QoS0 directly? Use settings parameter for it?
 			_session.sendQueue.add(pub, qos == QoSLevel.QoS0 ?
@@ -653,9 +658,6 @@ class MqttClient
 		 */
 		void subscribe(const string[] topics, QoSLevel qos = QoSLevel.QoS0)
 		{
-			import std.algorithm : map;
-			import std.array : array;
-
 			auto sub = Subscribe();
 			sub.packetId = _subId = PacketIdGenerator.get.nextPacketId();
 			sub.topics = topics.map!(a => Topic(a, qos)).array;
@@ -679,9 +681,6 @@ class MqttClient
 		 */
 		void unsubscribe(const string[] topics...)
 		{
-			import std.algorithm : map;
-			import std.array : array;
-
 			auto unsub = Unsubscribe();
 			unsub.packetId = _unsubId = PacketIdGenerator.get.nextPacketId();
 			unsub.topics = topics.dup;
@@ -739,9 +738,8 @@ class MqttClient
 	/// Publish request acknowledged - QoS1
 	void onPubAck(PubAck packet)
 	{
-		MessageContext* ctx;
 		size_t idx;
-		bool found = _session.inflightQueue.canFind(packet.packetId, ctx, idx, PacketState.waitForPuback);
+		immutable found = _session.inflightQueue.canFind(packet.packetId, idx, PacketState.waitForPuback);
 
 		if (found)
 		{
@@ -757,9 +755,8 @@ class MqttClient
 	/// Publish request acknowledged - QoS2
 	void onPubRec(PubRec packet)
 	{
-		MessageContext* ctx;
 		size_t idx;
-		bool found = _session.inflightQueue.canFind(packet.packetId, ctx, idx,
+		immutable found = _session.inflightQueue.canFind(packet.packetId, idx,
 			PacketState.waitForPubrec, PacketState.waitForPubcomp); // Both states to handle possible resends of unanswered PubRec packets
 
 		if (found) { version(MqttDebug) logDebug("MQTT Received PUBREC - %s", packet); }
@@ -770,7 +767,7 @@ class MqttClient
 
 		if (found)
 		{
-			ctx.state = PacketState.waitForPubcomp;
+			_session.inflightQueue[idx].state = PacketState.waitForPubcomp;
 			_session.inflightQueue.emit();
 		}
 	}
@@ -778,9 +775,8 @@ class MqttClient
 	/// Confirmation that message was succesfully delivered (Sender side)
 	void onPubComp(PubComp packet)
 	{
-		MessageContext* ctx;
 		size_t idx;
-		auto found = _session.inflightQueue.canFind(packet.packetId, ctx, idx, PacketState.waitForPubcomp);
+		immutable found = _session.inflightQueue.canFind(packet.packetId, idx, PacketState.waitForPubcomp);
 
 		if (found)
 		{
@@ -793,9 +789,8 @@ class MqttClient
 
 	void onPubRel(PubRel packet)
 	{
-		MessageContext* ctx;
 		size_t idx;
-		auto found = _session.inflightQueue.canFind(packet.packetId, ctx, idx, PacketState.waitForPubrel);
+		immutable found = _session.inflightQueue.canFind(packet.packetId, idx, PacketState.waitForPubrel);
 
 		if (found)
 		{
@@ -967,7 +962,7 @@ final:
 	in { assert(_con && _con.connected); }
 	body
 	{
-		version(MqttDebug) logDebug("MQTT Entering listening loop - TID:%s", thisTid);
+		version (MqttDebug) () @trusted { logDebug("MQTT Entering listening loop - TID:%s", thisTid); }();
 
 		auto buffer = new ubyte[4096];
 
@@ -992,7 +987,7 @@ final:
 	in { assert(_con && _con.connected); }
 	body
 	{
-		version(MqttDebug) logDebug("MQTT Entering dispatch loop - TID:%s", thisTid);
+		version (MqttDebug) () @trusted { logDebug("MQTT Entering dispatch loop - TID:%s", thisTid); }();
 
 		bool con = true;
 		while (true)

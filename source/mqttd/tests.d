@@ -36,6 +36,8 @@ import std.stdio;
 import mqttd;
 import mqttd.serialization;
 
+@safe:
+
 /// ubyte tests
 unittest
 {

@@ -10,7 +10,6 @@ shared static this()
 {
 	import vibe.core.log : setLogFormat, FileLogger;
 	import vibe.core.core : sleep, runTask;
-	import core.time;
 
 	setLogFormat(FileLogger.Format.threadTime);
 
