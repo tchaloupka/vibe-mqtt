@@ -1,7 +1,7 @@
 vibe-mqtt changelog
 ===================
 
-#### v0.1.8
+#### v0.2.0
 - Fix subscribe to go through session, not directly
 - Fix unittest imports
 - Fix #10 - check packetId usage in session
@@ -15,6 +15,14 @@ vibe-mqtt changelog
 - Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
 - Added support to set KeepAlive interval for sending control packets to determine connection state with the broker (PingReq/PingResp)
 - Various refactorings and optimizations
+- Added safe attribute throughout the library
+- Make compatible with vibe-0.8.0
+
+#### v0.1.8
+- Fix #25 - 32bit platform type fix
+- Fix unittest imports
+- Fix subscribe to go through session, not directly
+- Partial fix to be usable with vibe-0.8.0
 
 #### v0.1.7
 - Fix import in tests.d
