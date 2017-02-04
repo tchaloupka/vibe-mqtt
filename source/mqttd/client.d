@@ -560,7 +560,7 @@ final:
 
 		while (_con.connected && !_con.empty)
 		{
-			auto size = _con.leastSize;
+			auto size = cast(size_t)_con.leastSize;
 			if (size > 0)
 			{
 				if (size > buffer.length) size = buffer.length;
