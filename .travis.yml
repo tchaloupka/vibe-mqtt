@@ -1,4 +1,5 @@
 language: d
+sudo: false
 
 d:
   - dmd-2.073.0
@@ -12,7 +13,7 @@ d:
 install:
 
 script:
-  - dub test --compiler=${DC}
+  - dub upgrade && dub test --compiler=${DC}
 
 branches:
   only:
