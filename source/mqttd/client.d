@@ -197,7 +197,7 @@ struct Session
 	}
 
 	/// Finds package context stored in session
-	auto canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any)
+	auto canFind(ushort packetId, out PacketContext ctx, out size_t idx, PacketState state = PacketState.any) @trusted
 	{
 		size_t i;
 		foreach(ref c; _packets)
