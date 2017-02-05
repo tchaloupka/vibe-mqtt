@@ -640,7 +640,7 @@ unittest
 			pub.header.retain = retain;
 			pub.topic = topic;
 			static if (isSomeString!T) pub.payload = payload.representation.dup;
-			else pub.payload = payload;
+			else pub.payload = payload.dup;
 
 			//TODO: Maybe send QoS0 directly? Use settings parameter for it?
 			_session.sendQueue.add(pub, qos == QoSLevel.QoS0 ?
