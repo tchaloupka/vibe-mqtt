@@ -24,10 +24,10 @@ vibe-mqtt
 - [x] Data agnostic
 - [x] Message ordering
 - [x] KeepAlive mechanism support (PingReq/PingResp) ([#11](https://github.com/tchaloupka/vibe-mqtt/issues/11))
+- [x] Auto reconnect to broker ([#15](https://github.com/tchaloupka/vibe-mqtt/issues/22))
 - [ ] On subscribe topics validation ([#17](https://github.com/tchaloupka/vibe-mqtt/issues/17))
 - [ ] Last Will and Testament (LWT) ([#21](https://github.com/tchaloupka/vibe-mqtt/issues/21))
 - [ ] Delivery retry ([#14](https://github.com/tchaloupka/vibe-mqtt/issues/22))
-- [ ] Auto reconnect to broker ([#15](https://github.com/tchaloupka/vibe-mqtt/issues/22))
 - [ ] TLS/SSL ([#16](https://github.com/tchaloupka/vibe-mqtt/issues/22))
 
 Pull Requests are welcome, don't be shy ;)
