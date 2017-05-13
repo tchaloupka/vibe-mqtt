@@ -10,6 +10,7 @@ __dummy.html
 *.dll
 dub.selections.json
 __test__*
+vibe-mqtt-test*
 *.sln
 *.visualdproj
 .vs

@@ -29,27 +29,26 @@
  */
 module mqttd.client;
 
-debug import std.stdio;
-
-import mqttd.traits;
 import mqttd.messages;
 import mqttd.serialization;
-
-import vibe.core.log;
-import vibe.core.net: TCPConnection;
-import vibe.core.stream;
-import vibe.core.sync;
-import vibe.core.task;
-import vibe.core.concurrency;
-import vibe.utils.array : FixedRingBuffer;
+import mqttd.traits;
 
 import std.algorithm : any, map;
 import std.array : array;
 import std.datetime;
 import std.exception;
+debug import std.stdio;
 import std.string : format, representation;
 import std.traits;
-import std.typecons : Flag, Yes, No;
+import std.typecons : Flag, No, Yes;
+
+import vibe.core.concurrency;
+import vibe.core.log;
+import vibe.core.net: TCPConnection;
+import vibe.core.stream;
+import vibe.core.sync;
+import vibe.core.task;
+import vibe.utils.array : FixedRingBuffer;
 
 // constants
 enum MQTT_MAX_PACKET_ID = ushort.max; /// maximal packet id (0..65536) - defined by MQTT protocol
@@ -80,6 +79,7 @@ struct Settings
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
 	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default). 
+	ushort reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
 }
 
 /**
@@ -559,8 +559,14 @@ unittest
 		in { assert(_con is null ? true : !_con.connected); }
 		body
 		{
-			import vibe.core.net: connectTCP;
 			import vibe.core.core: runTask;
+			import vibe.core.net: connectTCP;
+
+			if (_conAckTimer.pending)
+			{
+				version(MqttDebug) logDebug("MQTT Broker already Connecting");
+				return;
+			}
 
 			//cleanup before reconnects
 			_readBuffer.clear();
@@ -852,7 +858,7 @@ unittest
 	/// Client was disconnected from broker
 	void onDisconnect()
 	{
-		version(MqttDebug) logDebug("MQTT onDisconnect");
+		version(MqttDebug) logDebug("MQTT onDisconnect, connected: %s", _con.connected);
 
 		if (_con.connected) _con.close();
 
@@ -861,6 +867,14 @@ unittest
 
 		if (_pingReqTimer && _pingReqTimer.pending) _pingReqTimer.stop();
 		if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop();
+		if (_settings.reconnect)
+		{
+			_reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect),
+				{
+					logDiagnostic("MQTT reconnecting");
+					this.connect();
+				}, false);
+		}
 	}
 
 private:
@@ -872,7 +886,7 @@ private:
 	FixedRingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
 	bool _onDisconnectCalled;
-	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer;
+	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer, _reconnectTimer;
 	ushort _subId, _unsubId;
 
 final:
