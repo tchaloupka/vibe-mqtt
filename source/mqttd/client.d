@@ -78,7 +78,7 @@ struct Settings
 	bool cleanSession = true; /// clean client and server session state on connect
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
-	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default). 
+	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default).
 	ushort reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
 }
 
@@ -306,7 +306,7 @@ private @safe struct SessionQueue(Flag!"send" send)
 	 * 		packet = packet to be sent (can be Publish, Subscribe or Unsubscribe)
 	 * 		state = initial packet state
 	 * 		origin = origin of the packet (session stores control packets from broker too)
-	 * 
+	 *
 	 * Returns:
 	 * 		Assigned packetId (0 if QoS0 is set). If message originates from broker, it keeps the original..
 	 */
@@ -571,31 +571,39 @@ unittest
 			//cleanup before reconnects
 			_readBuffer.clear();
 			if (_settings.cleanSession ) _session.clear();
-
-			_con = connectTCP(_settings.host, _settings.port);
-			_listener = runTask(&listener);
-			_dispatcher = runTask(&dispatcher);
 			_onDisconnectCalled = false;
 
-			version(MqttDebug) logDebug("MQTT Broker Connecting");
-
-			auto con = Connect();
-			con.clientIdentifier = _settings.clientId;
-			con.flags.cleanSession = _settings.cleanSession;
-			con.keepAlive = _settings.keepAlive;
-			if (_settings.userName.length > 0)
+			try
 			{
-				con.flags.userName = true;
-				con.userName = _settings.userName;
-				if (_settings.password.length > 0)
-				{
-					con.flags.password = true;
-					con.password = _settings.password;
-				}
-			}
+				_con = connectTCP(_settings.host, _settings.port);
+				_listener = runTask(&listener);
+				_dispatcher = runTask(&dispatcher);
 
-			this.send(con);
-			_conAckTimer.rearm(5.seconds);
+				version(MqttDebug) logDebug("MQTT Broker Connecting");
+
+				auto con = Connect();
+				con.clientIdentifier = _settings.clientId;
+				con.flags.cleanSession = _settings.cleanSession;
+				con.keepAlive = _settings.keepAlive;
+				if (_settings.userName.length > 0)
+				{
+					con.flags.userName = true;
+					con.userName = _settings.userName;
+					if (_settings.password.length > 0)
+					{
+						con.flags.password = true;
+						con.password = _settings.password;
+					}
+				}
+
+				this.send(con);
+				_conAckTimer.rearm(5.seconds);
+			}
+			catch (Exception ex)
+			{
+				() @trusted {logError("MQTT Error connecting to the broker: %s", ex);}();
+				callOnDisconnect();
+			}
 		}
 
 		/// Sends Disconnect packet to the broker and closes the underlying connection
@@ -858,9 +866,9 @@ unittest
 	/// Client was disconnected from broker
 	void onDisconnect()
 	{
-		version(MqttDebug) logDebug("MQTT onDisconnect, connected: %s", _con.connected);
+		version (MqttDebug) logDebug("MQTT onDisconnect, connected: %s", _con !is null ? _con.connected : false);
 
-		if (_con.connected) _con.close();
+		if (_con !is null && _con.connected) _con.close();
 
 		_session.inflightQueue.emit();
 		_session.sendQueue.emit();
