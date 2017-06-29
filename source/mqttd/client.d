@@ -584,7 +584,7 @@ unittest
 				auto con = Connect();
 				con.clientIdentifier = _settings.clientId;
 				con.flags.cleanSession = _settings.cleanSession;
-				con.keepAlive = _settings.keepAlive;
+				con.keepAlive = cast(ushort)((_settings.keepAlive * 3) / 2);
 				if (_settings.userName.length > 0)
 				{
 					con.flags.userName = true;
