@@ -911,7 +911,7 @@ final:
 			_readBuffer.capacity = _readBuffer.capacity + data.length;
 		_readBuffer.put(data);
 
-		if (_readBuffer.length > 0)
+		while (_readBuffer.length > 0)
 		{
 			// try read packet header
 			FixedHeader header = _readBuffer[0]; // type + flags
