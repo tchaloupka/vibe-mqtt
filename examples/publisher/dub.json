@@ -6,5 +6,8 @@
     "dependencies": {
         "vibe-mqtt": {"version": "~master", "path": "../../"}
     },
+    "subConfigurations": {
+        "vibe-mqtt": "vibed-core"
+    },
     "versions": ["VibeDefaultMain", "MqttDebug"]
 }
