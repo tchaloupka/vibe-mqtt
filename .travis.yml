@@ -1,6 +1,11 @@
 language: d
 sudo: false
 
+addons:
+  apt:
+    packages:
+      - libevent-dev
+
 d:
   - dmd-2.076.0
   - dmd-2.075.1
