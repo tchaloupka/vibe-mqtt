@@ -11,6 +11,9 @@ vibe-mqtt changelog
 - Fix #9 - Wait for ConnAck before sending pending messages
 - Fix #13 - Maintain client session state
 - Fix #12 - QoS 2 level support
+- Fix #28 - allow more than 23B for client identifier
+- Fix #29 - Acquiring writer of already owned connection
+- Fix #26 - compilable with the new vibe-core
 - Fix unsubscribe sending blank topics
 - Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
 - Added support to set KeepAlive interval for sending control packets to determine connection state with the broker (PingReq/PingResp)
@@ -34,7 +37,7 @@ vibe-mqtt changelog
 - Remove repeated allocation of buffer in listener loop
 - Clean read buffer before connect
 - Check if TCPConnection is empty in listener loop
-- Fix #6 - disconnect() hangs up then listener() fibre in different task 
+- Fix #6 - disconnect() hangs up then listener() fibre in different task
 
 #### v0.1.5
 - Remove assert from connected property to be able to check even if the connection is not set yet
