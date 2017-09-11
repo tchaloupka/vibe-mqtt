@@ -541,6 +541,8 @@ unittest
 	{
 		import std.socket : Socket;
 
+		_mutex = new TaskMutex();
+
 		_settings = settings;
 		if (_settings.clientId.length == 0) // set clientId if not provided
 			_settings.clientId = Socket.hostName;
@@ -945,6 +947,7 @@ private:
 	bool _onDisconnectCalled;
 	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer, _reconnectTimer;
 	ushort _subId, _unsubId;
+	TaskMutex _mutex;
 
 final:
 
@@ -1130,6 +1133,16 @@ final:
 
 	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)
 	{
+		// workaround for older vibe-core
+		static if (!__traits(compiles, scopedMutexLock))
+		{
+			import core.sync.mutex : Mutex;
+			ScopedMutexLock scopedMutexLock(Mutex mutex, LockMode mode = LockMode.lock) @safe
+			{
+				return ScopedMutexLock(mutex, mode);
+			}
+		}
+
 		static if (is (T == Publish))
 		{
 			version (MqttDebug)
@@ -1160,8 +1173,17 @@ final:
 				logDebug("MQTT OUT: %s", msg);
 				logDebugV("MQTT OUT: %(%.02x %)", _sendBuffer.data);
 			}
-			try _con.write(_sendBuffer.data); catch (Exception) { this.disconnect(); }
-			return true;
+			try
+			{
+				auto lock = scopedMutexLock(_mutex);
+				_con.write(_sendBuffer.data);
+				return true;
+			}
+			catch (Exception)
+			{
+				this.disconnect();
+				return false;
+			}
 		}
 		else return false;
 	}
