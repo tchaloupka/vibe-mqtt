@@ -1150,16 +1150,20 @@ final:
 				static SysTime last;
 				static size_t messages;
 
-				if (last == SysTime.init) last = Clock.currTime;
-				messages++;
-
-				auto diff = Clock.currTime - last;
-				if (diff.total!"msecs" >= 1_000)
+				try
 				{
-					logDiagnostic("MQTT %s messages/s", cast(double)(1_000 * messages)/diff.total!"msecs");
-					messages = 0;
-					last = Clock.currTime;
+					if (last == SysTime.init) last = Clock.currTime;
+					messages++;
+
+					auto diff = Clock.currTime - last;
+					if (diff.total!"msecs" >= 1_000)
+					{
+						logDiagnostic("MQTT %s messages/s", cast(double)(1_000 * messages)/diff.total!"msecs");
+						messages = 0;
+						last = Clock.currTime;
+					}
 				}
+				catch (Exception) {}
 			}
 		}
 
