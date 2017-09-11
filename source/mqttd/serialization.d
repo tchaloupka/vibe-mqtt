@@ -371,8 +371,12 @@ void validate(T)(auto ref in T packet) pure
 
 	static if (__traits(hasMember, T, "clientIdentifier"))
 	{
-		enforce(packet.clientIdentifier.length > 0 && packet.clientIdentifier.length < 24,
-			"Client Identifier SHOULD be 1 to 23 characters long");
+		import std.string : representation;
+
+		if (packet.clientIdentifier.length == 0)
+			enforce(packet.flags.cleanSession, "If the Client supplies a zero-byte ClientId, the Client MUST also set CleanSession to 1");
+
+		// note that some broker implementations MAY not support client identifiers with more than 23 encoded bytes - http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc385349242
 	}
 
 	static if (is(T == ConnectFlags))

@@ -375,7 +375,7 @@ struct ConnectFlags
 	 * When a Client connects with CleanSession set to 0, it is requesting that the Server maintain its MQTT session
 	 * state after it disconnects. Clients should only connect with CleanSession set to 0, if they intend to reconnect
 	 * to the Server at some later point in time. When a Client has determined that it has no further use for
-	 * the session it should do a final connect with CleanSession set to 1 and then disconnect.
+	 * the session, it should do a final connect with CleanSession set to 1 and then disconnect.
 	 */
 	@property bool cleanSession() const
 	{
