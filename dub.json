@@ -9,7 +9,16 @@
         {
             "name": "vibed",
             "dependencies": {
-                "vibe-d:core": "~>0.8.0-beta"
+                "vibe-d:core": "~>0.8.0"
+            }
+        },
+        {
+            "name": "vibed-core",
+            "dependencies": {
+                "vibe-d:core": "~>0.8.0"
+            },
+            "subConfigurations": {
+                "vibe-d:core": "vibe-core"
             }
         }
     ]

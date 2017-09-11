@@ -106,7 +106,7 @@ private:
 	pragma(inline, true) auto getIdx(ushort id) { return id / (size_t.sizeof*8); }
 	pragma(inline, true) auto getIdxValue(ushort id) { return cast(size_t)(1uL << (id % (size_t.sizeof*8))); }
 
-	ManualEvent _event;
+	LocalManualEvent _event;
 	ushort _packetId = 0u;
 	size_t[(MQTT_MAX_PACKET_ID+1)/(size_t.sizeof*8)] _idUsage; //1024 * 64 = 65536 => id usage flags storage
 
@@ -138,7 +138,7 @@ public:
 	out (result)
 	{
 		assert(result, "packet id can't be 0!");
-		assert(_event !is null);
+		assert(_event);
 	}
 	body
 	{
@@ -170,7 +170,7 @@ public:
 	pragma(inline) void setUsed(ushort id)
 	{
 		assert(!isUsed(id));
-		assert(_event !is null);
+		assert(_event);
 
 		_idUsage[getIdx(id)] |= getIdxValue(id);
 		version (unittest) {} //HACK: For some reason unittest will segfault when emiting
@@ -182,7 +182,7 @@ public:
 	{
 		assert(id != 0);
 		assert(isUsed(id));
-		assert(_event !is null);
+		assert(_event);
 
 		_idUsage[getIdx(id)] ^= getIdxValue(id);
 
@@ -462,7 +462,7 @@ nothrow:
 	}
 
 private:
-	ManualEvent _event;
+	LocalManualEvent _event;
 	SessionContainer _packets;
 }
 
@@ -477,6 +477,8 @@ private @safe struct Session
 		_inflightQueue = InflightQueue(settings);
 		_sendQueue = SendQueue(settings);
 	}
+
+nothrow:
 
 	@disable this(this) {}
 
@@ -533,7 +535,7 @@ unittest
 @safe class MqttClient
 {
 	import std.array : Appender;
-	import vibe.core.core : Timer, createTimer, setTimer;
+	import vibe.core.core : createTimer, setTimer, Timer;
 
 	this(Settings settings)
 	{
@@ -545,7 +547,8 @@ unittest
 
 		_readBuffer.capacity = 4 * 1024;
 		_session = Session(settings);
-		_conAckTimer = createTimer(()
+		_conAckTimer = createTimer(
+			() @safe nothrow
 			{
 				logWarn("MQTT ConAck not received, disconnecting");
 				this.disconnect();
@@ -555,14 +558,22 @@ unittest
 	final
 	{
 		/// Connects to the specified broker and sends it the Connect packet
-		void connect()
-		in { assert(_con is null ? true : !_con.connected); }
+		void connect() @safe nothrow
+		in { assert(!this.connected); }
 		body
 		{
 			import vibe.core.core: runTask;
 			import vibe.core.net: connectTCP;
 
-			if (_conAckTimer.pending)
+			//Workaround for older vibe-core
+			static if (!__traits(compiles, () nothrow { _conAckTimer.pending; } ))
+			{
+				bool pending;
+				try pending = _conAckTimer.pending; catch (Exception) assert(false);
+			}
+			else auto pending = _conAckTimer.pending;
+
+			if (pending)
 			{
 				version(MqttDebug) logDebug("MQTT Broker already Connecting");
 				return;
@@ -607,23 +618,23 @@ unittest
 		}
 
 		/// Sends Disconnect packet to the broker and closes the underlying connection
-		void disconnect()
-		in { assert(!(_con is null)); }
+		void disconnect() nothrow
+		in { assert(_con); }
 		body
 		{
-			if (_con.connected)
+			if (this.connected)
 			{
 				version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
 
 				this.send(Disconnect());
-				_con.flush();
-				_con.close();
+				try _con.flush(); catch (Exception) {}
+				try _con.close(); catch (Exception) {}
 
 				_session.inflightQueue.emit();
 				_session.sendQueue.emit();
 
 				if(Task.getThis !is _listener)
-					_listener.join;
+					try _listener.join; catch (Exception) {}
 			}
 			else version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
 		}
@@ -631,9 +642,10 @@ unittest
 		/**
 		 * Return true, if client is in a connected state
 		 */
-		@property bool connected() const
+		@property bool connected() const nothrow
 		{
-			return _con !is null && _con.connected;
+			// not nothrow in older vibe-core
+			try return _con && _con.connected; catch (Exception) return false;
 		}
 
 		/**
@@ -679,9 +691,10 @@ unittest
 			if (this.send(sub))
 			{
 				_subAckTimer = setTimer(dur!"msecs"(1_000),
+					() @safe nothrow
 					{
 						logError("MQTT Server didn't respond with SUBACK - disconnecting");
-						this.disconnect;
+						this.disconnect();
 					});
 			}
 		}
@@ -702,9 +715,10 @@ unittest
 			if (this.send(unsub))
 			{
 				_unsubAckTimer = setTimer(dur!"msecs"(1_000),
+					() @safe nothrow
 					{
 						logError("MQTT Server didn't respond with UNSUBACK - disconnecting");
-						this.disconnect;
+						this.disconnect();
 					});
 			}
 		}
@@ -722,15 +736,30 @@ unittest
 			if (_settings.keepAlive)
 			{
 				_pingReqTimer = setTimer(dur!"seconds"(_settings.keepAlive),
+					() @safe nothrow
 					{
 						if (this.send(PingReq()))
 						{
-							if (_pingRespTimer && _pingRespTimer.pending) return;
-							_pingRespTimer = setTimer(dur!"seconds"(10),
+							//workaround for older vibe-core
+							static if (!__traits(compiles, () nothrow { _pingRespTimer && _pingRespTimer.pending; }))
+							{
+								try if (_pingRespTimer && _pingRespTimer.pending) return;
+								catch (Exception ex) {}
+							}
+							else if (_pingRespTimer && _pingRespTimer.pending) return;
+
+							auto timeout = () @safe nothrow
 							{
 								logError("MQTT no PINGRESP received - disconnecting");
 								this.disconnect();
-							}, false);
+							};
+
+							static if (!__traits(compiles, () nothrow { setTimer(() @safe nothrow {}); }))
+							{
+								try _pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
+								catch (Exception ex) logError("MQTT failed to set PINGRESP timeout: " ~ ex.msg);
+							}
+							else _pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
 						}
 					}, true);
 			}
@@ -864,24 +893,44 @@ unittest
 	}
 
 	/// Client was disconnected from broker
-	void onDisconnect()
+	void onDisconnect() nothrow
 	{
-		version (MqttDebug) logDebug("MQTT onDisconnect, connected: %s", _con !is null ? _con.connected : false);
+		version (MqttDebug) logDebug("MQTT onDisconnect, connected: %s", this.connected);
 
-		if (_con !is null && _con.connected) _con.close();
+		if (this.connected) try _con.close(); catch (Exception) {}
 
 		_session.inflightQueue.emit();
 		_session.sendQueue.emit();
 
-		if (_pingReqTimer && _pingReqTimer.pending) _pingReqTimer.stop();
-		if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop();
+		//workaround older vibe-core
+		static if (!__traits(compiles, _pingReqTimer && _pingReqTimer.pending))
+		{
+			try
+			{
+				if (_pingReqTimer && _pingReqTimer.pending) _pingReqTimer.stop();
+				if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop();
+			}
+			catch (Exception) {}
+		}
+		else
+		{
+			if (_pingReqTimer && _pingReqTimer.pending) _pingReqTimer.stop();
+			if (_pingRespTimer && _pingRespTimer.pending) _pingRespTimer.stop();
+		}
 		if (_settings.reconnect)
 		{
-			_reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect),
+			auto recon = () @safe nothrow
 				{
 					logDiagnostic("MQTT reconnecting");
 					this.connect();
-				}, false);
+				};
+
+			static if (!__traits(compiles, () nothrow { setTimer(() @safe nothrow {}); }))
+			{
+				try _reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
+				catch (Exception ex) logError("MQTT failed to set reconnect: " ~ ex.msg);
+			}
+			else _reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
 		}
 	}
 
@@ -1079,7 +1128,7 @@ final:
 		version(MqttDebug) logDebug("MQTT Exiting dispatch loop");
 	}
 
-	auto send(T)(auto ref T msg) if (isMqttPacket!T)
+	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)
 	{
 		static if (is (T == Publish))
 		{
@@ -1102,22 +1151,22 @@ final:
 		}
 
 		_sendBuffer.clear(); // clear to write new
-		_sendBuffer.serialize(msg);
+		try _sendBuffer.serialize(msg); catch (Exception ex) { assert(false, ex.msg); }
 
-		if (_con.connected)
+		if (this.connected)
 		{
 			version(MqttDebug)
 			{
 				logDebug("MQTT OUT: %s", msg);
 				logDebugV("MQTT OUT: %(%.02x %)", _sendBuffer.data);
 			}
-			_con.write(_sendBuffer.data);
+			try _con.write(_sendBuffer.data); catch (Exception) { this.disconnect(); }
 			return true;
 		}
 		else return false;
 	}
 
-	auto callOnDisconnect()
+	auto callOnDisconnect() nothrow
 	{
 		if (!_onDisconnectCalled)
 		{
