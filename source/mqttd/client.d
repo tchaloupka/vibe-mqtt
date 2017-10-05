@@ -1036,7 +1036,11 @@ final:
 	in { assert(_con && _con.connected); }
 	body
 	{
-		version (MqttDebug) () @trusted { logDebug("MQTT Entering listening loop - TID:%s", thisTid); }();
+		version (MqttDebug)
+		{
+			() @trusted { logDebug("MQTT Entering listening loop - TID:%s", thisTid); }();
+			scope (exit) logDebug("MQTT Exiting listening loop");
+		}
 
 		auto buffer = new ubyte[4096];
 
@@ -1052,8 +1056,6 @@ final:
 		}
 
 		if (!_con.connected) callOnDisconnect();
-
-		version(MqttDebug) logDebug("MQTT Exiting listening loop");
 	}
 
 	/// loop to dispatch in session stored packets
@@ -1061,9 +1063,12 @@ final:
 	in { assert(_con && _con.connected); }
 	body
 	{
-		version (MqttDebug) () @trusted { logDebug("MQTT Entering dispatch loop - TID:%s", thisTid); }();
+		version (MqttDebug)
+		{
+			() @trusted { logDebug("MQTT Entering dispatch loop - TID:%s", thisTid); }();
+			scope (exit) logDebug("MQTT Exiting dispatch loop");
+		}
 
-		bool con = true;
 		while (true)
 		{
 			// wait for session state change
@@ -1127,8 +1132,6 @@ final:
 		}
 
 		if (!_con.connected) callOnDisconnect();
-
-		version(MqttDebug) logDebug("MQTT Exiting dispatch loop");
 	}
 
 	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)
