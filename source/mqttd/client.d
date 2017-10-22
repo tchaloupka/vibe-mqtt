@@ -353,16 +353,22 @@ private @safe struct SessionQueue(Flag!"send" send)
 				}
 				else
 				{
-					version (MqttDebug) logDebug("MQTT SendQueueFull ([%s] %s) - waiting", ctx.packetId, ctx.state);
+					version (MqttDebug)
+					{
+						logDebug("MQTT SendQueueFull ([%s] %s) - waiting", ctx.packetId, ctx.state);
+						scope (exit) logDebug("MQTT SendQueueFull after wait ([%s] %s)", ctx.packetId, ctx.state);
+					}
 					_event.wait();
-					version (MqttDebug) logDebug("MQTT SendQueueFull after wait ([%s] %s)", ctx.packetId, ctx.state);
 				}
 			}
 			else
 			{
-				version (MqttDebug) logDebug("MQTT InflightQueueFull ([%s] %s) - waiting", ctx.packetId, ctx.state);
+				version (MqttDebug)
+				{
+					logDebug("MQTT InflightQueueFull ([%s] %s) - waiting", ctx.packetId, ctx.state);
+					scope (exit) logDebug("MQTT InflightQueueFull after wait ([%s] %s)", ctx.packetId, ctx.state);
+				}
 				_event.wait();
-				version (MqttDebug) logDebug("MQTT InflightQueueFull after wait ([%s] %s)", ctx.packetId, ctx.state);
 			}
 		}
 
@@ -541,7 +547,8 @@ unittest
 	{
 		import std.socket : Socket;
 
-		_mutex = new TaskMutex();
+		_readMutex = new RecursiveTaskMutex();
+		_writeMutex = new RecursiveTaskMutex();
 
 		_settings = settings;
 		if (_settings.clientId.length == 0) // set clientId if not provided
@@ -621,16 +628,20 @@ unittest
 
 		/// Sends Disconnect packet to the broker and closes the underlying connection
 		void disconnect() nothrow
-		in { assert(_con); }
-		body
 		{
 			if (this.connected)
 			{
 				version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
 
 				this.send(Disconnect());
-				try _con.flush(); catch (Exception) {}
-				try _con.close(); catch (Exception) {}
+				try
+				{
+					auto wlock = scopedMutexLock(_writeMutex);
+					auto rlock = scopedMutexLock(_readMutex);
+					try _con.flush(); catch (Exception) {} // acquires writer
+					try _con.close(); catch (Exception) {} // acquires reader + writer
+				}
+				catch (Exception ex) {}
 
 				_session.inflightQueue.emit();
 				_session.sendQueue.emit();
@@ -899,7 +910,16 @@ unittest
 	{
 		version (MqttDebug) logDebug("MQTT onDisconnect, connected: %s", this.connected);
 
-		if (this.connected) try _con.close(); catch (Exception) {}
+		if (this.connected)
+		{
+			try
+			{
+				auto rlock = scopedMutexLock(_readMutex);
+				auto wlock = scopedMutexLock(_writeMutex);
+				_con.close(); // acquires reader + writer
+			}
+			catch (Exception) {}
+		}
 
 		_session.inflightQueue.emit();
 		_session.sendQueue.emit();
@@ -947,7 +967,7 @@ private:
 	bool _onDisconnectCalled;
 	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer, _reconnectTimer;
 	ushort _subId, _unsubId;
-	TaskMutex _mutex;
+	RecursiveTaskMutex _readMutex, _writeMutex;
 
 final:
 
@@ -957,7 +977,7 @@ final:
 		import mqttd.serialization;
 		import std.range;
 
-		version(MqttDebug) logDebugV("MQTT IN: %(%.02x %)", data);
+		version(MqttDebug) logTrace("MQTT IN: %(%.02x %)", data);
 
 		if (_readBuffer.freeSpace < data.length) // ensure all fits to the buffer
 			_readBuffer.capacity = _readBuffer.capacity + data.length;
@@ -1044,18 +1064,21 @@ final:
 
 		auto buffer = new ubyte[4096];
 
-		while (_con.connected && !_con.empty)
+		size_t size;
+		while (_con.connected)
 		{
-			auto size = cast(size_t)_con.leastSize;
-			if (size > 0)
 			{
+				auto lock = scopedMutexLock(_readMutex);
+				if (!_con.waitForData(Duration.max)) break;
+				size = cast(size_t)_con.leastSize;
+				if (size == 0) break;
 				if (size > buffer.length) size = buffer.length;
 				_con.read(buffer[0..size]);
-				proccessData(buffer[0..size]);
 			}
+			proccessData(buffer[0..size]);
 		}
 
-		if (!_con.connected) callOnDisconnect();
+		callOnDisconnect();
 	}
 
 	/// loop to dispatch in session stored packets
@@ -1136,16 +1159,6 @@ final:
 
 	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)
 	{
-		// workaround for older vibe-core
-		static if (!__traits(compiles, scopedMutexLock))
-		{
-			import core.sync.mutex : Mutex;
-			ScopedMutexLock scopedMutexLock(Mutex mutex, LockMode mode = LockMode.lock) @safe
-			{
-				return ScopedMutexLock(mutex, mode);
-			}
-		}
-
 		static if (is (T == Publish))
 		{
 			version (MqttDebug)
@@ -1182,7 +1195,7 @@ final:
 			}
 			try
 			{
-				auto lock = scopedMutexLock(_mutex);
+				auto lock = scopedMutexLock(_writeMutex);
 				_con.write(_sendBuffer.data);
 				return true;
 			}
@@ -1201,6 +1214,16 @@ final:
 		{
 			_onDisconnectCalled = true;
 			onDisconnect();
+		}
+	}
+
+	// workaround for older vibe-core
+	static if (!__traits(compiles, scopedMutexLock))
+	{
+		import core.sync.mutex : Mutex;
+		ScopedMutexLock scopedMutexLock(Mutex mutex, LockMode mode = LockMode.lock) @safe
+		{
+			return ScopedMutexLock(mutex, mode);
 		}
 	}
 }
