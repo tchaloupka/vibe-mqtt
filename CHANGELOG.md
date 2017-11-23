@@ -15,6 +15,7 @@ vibe-mqtt changelog
 - Fix #29 - Acquiring writer of already owned connection
 - Fix #26 - compilable with the new vibe-core
 - Fix unsubscribe sending blank topics
+- Fix possible recursion on sending Disconnect while connection is failing
 - Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
 - Added support to set KeepAlive interval for sending control packets to determine connection state with the broker (PingReq/PingResp)
 - Various refactorings and optimizations
