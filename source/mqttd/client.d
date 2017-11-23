@@ -1201,7 +1201,7 @@ final:
 			}
 			catch (Exception)
 			{
-				this.disconnect();
+				static if (!is(T == Disconnect)) this.disconnect();
 				return false;
 			}
 		}
