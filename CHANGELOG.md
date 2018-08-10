@@ -22,6 +22,7 @@ vibe-mqtt changelog
 - Added safe attribute throughout the library
 - Make compatible with vibe-0.8.0
 - Added possibility to set reconnect interval in settings to enable autoreconnect
+- Added basic SSL/TLS support using vibe.d streams
 
 #### v0.1.8
 - Fix #25 - 32bit platform type fix
