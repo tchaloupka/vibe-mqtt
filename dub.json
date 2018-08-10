@@ -9,13 +9,15 @@
         {
             "name": "vibed",
             "dependencies": {
-                "vibe-d:core": "~>0.8.0"
+                "vibe-d:core": "~>0.8.4",
+                "vibe-d:tls": "~>0.8.4"
             }
         },
         {
             "name": "vibed-core",
             "dependencies": {
-                "vibe-d:core": "~>0.8.0"
+                "vibe-d:core": "~>0.8.4",
+                "vibe-d:tls": "~>0.8.4"
             },
             "subConfigurations": {
                 "vibe-d:core": "vibe-core"

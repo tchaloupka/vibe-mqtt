@@ -31,6 +31,7 @@ module mqttd.client;
 
 import mqttd.messages;
 import mqttd.serialization;
+import mqttd.stream_wrapper;
 import mqttd.traits;
 
 import std.algorithm : any, map;
@@ -48,6 +49,7 @@ import vibe.core.net: TCPConnection;
 import vibe.core.stream;
 import vibe.core.sync;
 import vibe.core.task;
+import vibe.stream.tls;
 import vibe.utils.array : FixedRingBuffer;
 
 // constants
@@ -80,6 +82,9 @@ struct Settings
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
 	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default).
 	ushort reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
+	bool useSsl = false; /// use SSL/TLS for the connection
+	string trustedCertificateFile = null; /// list of trusted certificates for verifying peer certificates
+	TLSPeerValidationMode peerValidationMode = TLSPeerValidationMode.none; /// mode for verifying peer certificates
 }
 
 /**
@@ -596,6 +601,20 @@ unittest
 			try
 			{
 				_con = connectTCP(_settings.host, _settings.port);
+				if(_settings.useSsl)
+				{
+					auto sslctx = createTLSContext(TLSContextKind.client);
+					sslctx.peerValidationMode = TLSPeerValidationMode.none;
+					if(_settings.trustedCertificateFile !is null)
+					{
+						sslctx.useTrustedCertificateFile(_settings.trustedCertificateFile);
+					}
+					_stream = createTLSStream(_con, sslctx);
+				}
+				else
+				{
+					_stream = new StreamWrapper!TCPConnection(_con);
+				}
 				_listener = runTask(&listener);
 				_dispatcher = runTask(&dispatcher);
 
@@ -638,8 +657,8 @@ unittest
 				{
 					auto wlock = scopedMutexLock(_writeMutex);
 					auto rlock = scopedMutexLock(_readMutex);
-					try _con.flush(); catch (Exception) {} // acquires writer
-					try _con.close(); catch (Exception) {} // acquires reader + writer
+					if(_stream !is null)
+						_stream.finalize(); // acquires reader + writer
 				}
 				catch (Exception ex) {}
 
@@ -916,7 +935,8 @@ unittest
 			{
 				auto rlock = scopedMutexLock(_readMutex);
 				auto wlock = scopedMutexLock(_writeMutex);
-				_con.close(); // acquires reader + writer
+				if (_stream !is null)
+					_stream.finalize(); // acquires reader + writer
 			}
 			catch (Exception) {}
 		}
@@ -959,6 +979,7 @@ unittest
 private:
 	Settings _settings;
 	TCPConnection _con;
+	Stream _stream;
 	Session _session;
 	Task _listener, _dispatcher;
 	Serializer!(Appender!(ubyte[])) _sendBuffer;
@@ -1069,11 +1090,11 @@ final:
 		{
 			{
 				auto lock = scopedMutexLock(_readMutex);
-				if (!_con.waitForData(Duration.max)) break;
-				size = cast(size_t)_con.leastSize;
+				if (_stream.empty) break;
+				size = cast(size_t) _stream.leastSize;
 				if (size == 0) break;
 				if (size > buffer.length) size = buffer.length;
-				_con.read(buffer[0..size]);
+				_stream.read(buffer[0..size]);
 			}
 			proccessData(buffer[0..size]);
 		}
@@ -1196,7 +1217,7 @@ final:
 			try
 			{
 				auto lock = scopedMutexLock(_writeMutex);
-				_con.write(_sendBuffer.data);
+				_stream.write(_sendBuffer.data);
 				return true;
 			}
 			catch (Exception)
