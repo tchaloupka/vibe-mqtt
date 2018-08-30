@@ -7,6 +7,8 @@ vibe-mqtt
 =========
 [MQTT](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) broker client library written completely in D.
 
+[API documentation](http://vibe-mqtt.dpldocs.info/mqttd.html)
+
 **MQTT protocol version supported:** 3.1.1
 
 **Depends on:** [vibe.d](https://github.com/rejectedsoftware/vibe.d)
