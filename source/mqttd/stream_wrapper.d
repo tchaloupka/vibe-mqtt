@@ -1,12 +1,10 @@
 /**
- *
- * /home/tomas/workspace/mqtt-d/source/mqttd/stream_wrapper.d
+ * A wrapper around streams, which do not actually implement the `Stream` interface
  *
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
  *
- * Copyright (c) 2015 Tomáš Chaloupka
- *
+ * License:
  * Boost Software License 1.0 (BSL-1.0)
  *
  * Permission is hereby granted, free of charge, to any person or organization obtaining a copy

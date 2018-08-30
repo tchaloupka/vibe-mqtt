@@ -1,12 +1,10 @@
 ﻿/**
- *
- * /home/tomas/workspace/mqtt-d/source/mqttd/message.d
+ * Definition of MQTT protocol messages
  *
  * Author:
  * Tomáš Chaloupka <chalucha@gmail.com>
  *
- * Copyright (c) 2015 Tomáš Chaloupka
- *
+ * License:
  * Boost Software License 1.0 (BSL-1.0)
  *
  * Permission is hereby granted, free of charge, to any person or organization obtaining a copy
