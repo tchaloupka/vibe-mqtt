@@ -30,7 +30,15 @@
 
 module mqttd.stream_wrapper;
 
-import vibe.core.stream : blocking, IOMode, isStream, Stream;
+version (Have_vibe_core) import vibe.core.stream : blocking, IOMode, isStream, Stream;
+else
+{
+	import vibe.core.stream : IOMode, isStream, Stream;
+
+	// workaround for the original vibe-d:core which doesn't have the blocking UDA defined
+	// See https://github.com/vibe-d/vibe-core/blob/6ca6dd16d4f89c1a8d3bb89fa58d56cf466d70e6/source/vibe/core/stream.d#L79 for details
+	struct blocking {}
+}
 
 import vibe.core.net;
 

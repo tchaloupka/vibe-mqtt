@@ -5,22 +5,21 @@
     "authors": ["Tomáš Chaloupka"],
     "targetType": "library",
     "license": "BSL-1.0",
+    "dependencies": {
+        "vibe-d:core": "~>0.8.4",
+        "vibe-d:tls": "~>0.8.4"
+    },
     "configurations": [
         {
-            "name": "vibed",
-            "dependencies": {
-                "vibe-d:core": "~>0.8.4",
-                "vibe-d:tls": "~>0.8.4"
+            "name": "vibed-core",
+            "subConfigurations": {
+                "vibe-d:core": "vibe-core"
             }
         },
         {
-            "name": "vibed-core",
-            "dependencies": {
-                "vibe-d:core": "~>0.8.4",
-                "vibe-d:tls": "~>0.8.4"
-            },
+            "name": "vibed",
             "subConfigurations": {
-                "vibe-d:core": "vibe-core"
+                "vibe-d:core": "libevent"
             }
         }
     ]
