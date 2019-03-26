@@ -1126,6 +1126,7 @@ final:
 				{
 					version (MqttDebug) logDebug("MQTT InflightQueue full, wait before sending next message");
 					_session.inflightQueue.wait();
+					if (_session.sendQueue.empty) break; // can be cleaned up on reconnect
 				}
 
 				version (MqttDebug) logDebugV("MQTT Packets in session: send=%s, wait=%s", _session.sendQueue.length, _session.inflightQueue.length);
