@@ -16,6 +16,8 @@ vibe-mqtt changelog
 - Fix #26 - compilable with the new vibe-core
 - Fix unsubscribe sending blank topics
 - Fix possible recursion on sending Disconnect while connection is failing
+- Fix possible assert in dispatcher during disconnect
+- Fix connection FD leak
 - Added possibility to set size of send (queue of messages to be send) and inflight (queue of messages being currently handled) queues
 - Added support to set KeepAlive interval for sending control packets to determine connection state with the broker (PingReq/PingResp)
 - Various refactorings and optimizations
@@ -23,6 +25,7 @@ vibe-mqtt changelog
 - Make compatible with vibe-0.8.0
 - Added possibility to set reconnect interval in settings to enable autoreconnect
 - Added basic SSL/TLS support using vibe.d streams
+- Added optional callbacks to settings - Fixes #23
 
 #### v0.1.8
 - Fix #25 - 32bit platform type fix
