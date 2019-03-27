@@ -6,52 +6,44 @@ import std.string : format;
 
 import mqttd;
 
-shared static this()
+void main()
 {
 	import vibe.core.log : setLogFormat, FileLogger;
-	import vibe.core.core : sleep, runTask;
-
-	class Subscriber : MqttClient
-	{
-		this(Settings settings)
-		{
-			super(settings);
-		}
-
-		override void onPublish(Publish packet)
-		{
-			super.onPublish(packet);
-
-			writeln(packet.topic, ": ", (cast(char[])packet.payload).idup);
-		}
-
-		override void onConnAck(ConnAck packet)
-		{
-			super.onConnAck(packet);
-
-			this.subscribe(["chat/#"], QoSLevel.QoS2);
-
-			// unsubscribe after 15 seconds
-			runTask(()
-				{
-					sleep(15.seconds());
-					this.unsubscribe("chat/#");
-				});
-
-			// disconnect after 20 seconds
-			runTask(()
-				{
-					sleep(20.seconds());
-					this.disconnect();
-				});
-		}
-	}
+	import vibe.core.core : sleep, runApplication, runTask;
 
 	setLogFormat(FileLogger.Format.threadTime);
 
 	auto settings = Settings();
 	settings.clientId = "test subscriber";
+	settings.reconnect = 1;
+	settings.onPublish = (scope MqttClient ctx, in Publish packet)
+	{
+		writeln(packet.topic, ": ", (cast(const char[])packet.payload).idup);
+	};
+	settings.onConnAck = (scope MqttClient ctx, in ConnAck packet)
+	{
+		if (packet.returnCode != ConnectReturnCode.ConnectionAccepted) return;
 
-	auto mqtt = new Subscriber(settings);
+		ctx.subscribe(["chat/#"], QoSLevel.QoS2);
+
+		// unsubscribe after 15 seconds
+		runTask(()
+			{
+				sleep(15.seconds());
+				ctx.unsubscribe("chat/#");
+			});
+
+		// disconnect after 20 seconds
+		runTask(()
+			{
+				sleep(20.seconds());
+				ctx.disconnect();
+			});
+	};
+
+	auto mqtt = new MqttClient(settings);
 	mqtt.connect();
+	scope (exit) mqtt.disconnect();
+
+	runApplication();
 }
