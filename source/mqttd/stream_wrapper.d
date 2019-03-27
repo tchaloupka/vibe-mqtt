@@ -96,6 +96,7 @@ public:
 
 	void finalize() @blocking
 	{
-		return _stream.finalize();
+		_stream.finalize();
+		_stream = T.init; // make sure that we don't hold any reference on wrapped connection
 	}
 }
