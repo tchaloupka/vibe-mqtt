@@ -62,25 +62,17 @@ Simple subscriber which connects to the MQTT broker, subscribes to the topic and
 Implicitly it connects to 127.0.0.1:1883
 
 ```D
-class Subscriber : MqttClient {
-    this(Settings settings) {
-        super(settings);
-    }
-
-    override void onPublish(Publish packet) {
-        super.onPublish(packet);
-        writeln("chat: ", cast(string)packet.payload);
-    }
-
-    override void onConnAck(ConnAck packet) {
-        super.onConnAck(packet);
-        this.subscribe(["chat"]);
-    }
-}
-
 auto settings = Settings();
 settings.clientId = "test subscriber";
+settings.onConnAck = (scope MqttClient ctx, in ConnAck packet)
+{
+    ctx.subscribe(["chat"]);
+};
+settings..onPublish = (scope MqttClient ctx, in Publish packet)
+{
+    writeln("chat: ", cast(string)packet.payload);
+};
 
-auto mqtt = new Subscriber(settings);
+auto mqtt = new MqttClient(settings);
 mqtt.connect();
 ```
