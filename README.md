@@ -68,7 +68,7 @@ settings.onConnAck = (scope MqttClient ctx, in ConnAck packet)
 {
     ctx.subscribe(["chat"]);
 };
-settings..onPublish = (scope MqttClient ctx, in Publish packet)
+settings.onPublish = (scope MqttClient ctx, in Publish packet)
 {
     writeln("chat: ", cast(string)packet.payload);
 };
