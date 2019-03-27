@@ -1,13 +1,25 @@
 {
     "name": "subscriber",
     "description": "A simple MQTT subscriber",
-    "copyright": "Copyright © 2015, Tomáš Chaloupka",
+    "copyright": "Copyright © 2019, Tomáš Chaloupka",
     "authors": ["Tomáš Chaloupka"],
+    "targetType": "executable",
     "dependencies": {
         "vibe-mqtt": {"version": "~master", "path": "../../"}
     },
-    "subConfigurations": {
-        "vibe-mqtt": "vibed-core"
-    },
+    "configurations": [
+        {
+            "name": "vibed-core",
+            "subConfigurations": {
+                "vibe-mqtt": "vibed-core"
+            }
+        },
+        {
+            "name": "vibed",
+            "subConfigurations": {
+                "vibe-mqtt": "vibed"
+            }
+        }
+    ],
     "versions": ["VibeDefaultMain", "MqttDebug"]
 }
