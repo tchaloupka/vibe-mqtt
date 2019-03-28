@@ -1,0 +1,15 @@
+name "publisher"
+description "A simple MQTT publisher"
+authors "Tomáš Chaloupka"
+copyright "Copyright © 2019, Tomáš Chaloupka"
+targetType "executable"
+versions "MqttDebug"
+
+dependency "vibe-mqtt" path="../../"
+
+configuration "vibed-core" {
+	subConfiguration "vibe-mqtt" "vibed-core"
+}
+configuration "vibed" {
+	subConfiguration "vibe-mqtt" "vibed"
+}

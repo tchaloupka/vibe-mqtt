@@ -1,0 +1,18 @@
+name "vibe-mqtt"
+description "A MQTT broker client for D"
+authors "Tomáš Chaloupka"
+copyright "Copyright © 2019, Tomáš Chaloupka"
+license "BSL-1.0"
+targetType "library"
+
+dependency "vibe-d:core" version="~>0.8.4"
+dependency "vibe-d:tls" version="~>0.8.4"
+
+configuration "vibed-core" {
+	targetType "library"
+	subConfiguration "vibe-d:core" "vibe-core"
+}
+configuration "vibed" {
+	targetType "library"
+	subConfiguration "vibe-d:core" "libevent"
+}
