@@ -588,7 +588,6 @@ unittest
 
 	/// Connects to the specified broker and sends it the Connect packet
 	void connect() @safe nothrow
-	in { assert(!this.connected); }
 	body
 	{
 		import vibe.core.core: runTask;
@@ -608,7 +607,15 @@ unittest
 			return;
 		}
 
-		//cleanup before reconnects
+		if (this.connected)
+		{
+			version(MqttDebug) logDebug("MQTT already Connected to Broker");
+			return;
+		}
+
+		version(MqttDebug) logDebug("MQTT Connect");
+
+		//cleanup before reconnect
 		_readBuffer.clear();
 		if (_settings.cleanSession ) _session.clear();
 		_disconnecting = false;
