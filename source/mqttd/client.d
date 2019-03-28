@@ -675,7 +675,11 @@ unittest
 				if(Task.getThis !is _listener)
 					try _listener.join; catch (Exception) {}
 			}
-			else version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
+			else
+			{
+				version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
+				disconnectImpl(true); // to make sure we stop any reconnect attempts too
+			}
 		}
 
 		/**
