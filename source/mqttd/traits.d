@@ -58,11 +58,9 @@ enum bool hasFixedHeader(T) = is(typeof(()
 			FixedHeader h = obj.header;
 		}));
 
-/// Range type Mqtt packed can be deserialized from
+/// Range type Mqtt packet can be deserialized from
 enum bool canDeserializeFrom(R) = isInputRange!R && isIntegral!(ElementType!R) && !isInfinite!R;
 
-/// Range type Mqtt packed can be serialized to
+/// Range type Mqtt packet can be serialized to
 enum bool canSerializeTo(R) = isOutputRange!(R, ubyte) &&
 	is(typeof(() { auto r = R(); r.clear(); const(ubyte)[] d = r.data; }));
-
-enum bool isCondition(C) = is(C : Condition!C, alias C);
