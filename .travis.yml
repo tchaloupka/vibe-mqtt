@@ -5,6 +5,7 @@ addons:
   apt:
     packages:
       - libevent-dev
+      - libssl-dev
 
 d:
   - dmd-2.085.0
@@ -27,10 +28,19 @@ d:
   - ldc-1.7.0
   - ldc-1.6.0
 
-install:
+before_install:
+  # Use the dub-updating fork of the installer script until https://github.com/dlang/installer/pull/301 is merged
+  - wget https://raw.githubusercontent.com/wilzbach/installer-dub/master/script/install.sh -O ~/dlang/install.dub.sh
+  - . $(bash ~/dlang/install.dub.sh -a dub)
+  - dub --version
 
 script:
-  - dub upgrade && dub test --compiler=${DC}
+  - dub test --compiler=${DC} -c vibed-core
+  - dub build --root=examples/publisher/ -c vibed-core
+  - dub build --root=examples/subscriber/ -c vibed-core
+  - dub test --compiler=${DC} -c vibed
+  - dub build --root=examples/publisher/ -c vibed
+  - dub build --root=examples/subscriber/ -c vibed
 
 branches:
   only:
