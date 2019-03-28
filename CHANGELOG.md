@@ -25,7 +25,8 @@ vibe-mqtt changelog
 - Make compatible with vibe-0.8.0
 - Added possibility to set reconnect interval in settings to enable autoreconnect
 - Added basic SSL/TLS support using vibe.d streams
-- Added optional callbacks to settings - Fixes #23
+- Added optional callbacks to settings - fixes #23
+- `connect()` and `disconnect()` aren't final anymore - fixes #23
 
 #### v0.1.8
 - Fix #25 - 32bit platform type fix
