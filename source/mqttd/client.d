@@ -586,102 +586,102 @@ unittest
 			});
 	}
 
-	final
+	/// Connects to the specified broker and sends it the Connect packet
+	void connect() @safe nothrow
+	in { assert(!this.connected); }
+	body
 	{
-		/// Connects to the specified broker and sends it the Connect packet
-		void connect() @safe nothrow
-		in { assert(!this.connected); }
-		body
+		import vibe.core.core: runTask;
+		import vibe.core.net: connectTCP;
+
+		//Workaround for older vibe-core
+		static if (!__traits(compiles, () nothrow { _conAckTimer.pending; } ))
 		{
-			import vibe.core.core: runTask;
-			import vibe.core.net: connectTCP;
+			bool pending;
+			try pending = _conAckTimer.pending; catch (Exception) assert(false);
+		}
+		else auto pending = _conAckTimer.pending;
 
-			//Workaround for older vibe-core
-			static if (!__traits(compiles, () nothrow { _conAckTimer.pending; } ))
-			{
-				bool pending;
-				try pending = _conAckTimer.pending; catch (Exception) assert(false);
-			}
-			else auto pending = _conAckTimer.pending;
-
-			if (pending)
-			{
-				version(MqttDebug) logDebug("MQTT Broker already Connecting");
-				return;
-			}
-
-			//cleanup before reconnects
-			_readBuffer.clear();
-			if (_settings.cleanSession ) _session.clear();
-			_disconnecting = false;
-
-			try
-			{
-				_con = connectTCP(_settings.host, _settings.port);
-				if(_settings.useSsl)
-				{
-					auto sslctx = createTLSContext(TLSContextKind.client);
-					sslctx.peerValidationMode = TLSPeerValidationMode.none;
-					if(_settings.trustedCertificateFile !is null)
-					{
-						sslctx.useTrustedCertificateFile(_settings.trustedCertificateFile);
-					}
-					_stream = createTLSStream(_con, sslctx);
-				}
-				else
-				{
-					_stream = new StreamWrapper!TCPConnection(_con);
-				}
-				_listener = runTask(&listener);
-				_dispatcher = runTask(&dispatcher);
-
-				version(MqttDebug) logDebug("MQTT Broker Connecting");
-
-				auto con = Connect();
-				con.clientIdentifier = _settings.clientId;
-				con.flags.cleanSession = _settings.cleanSession;
-				con.keepAlive = cast(ushort)((_settings.keepAlive * 3) / 2);
-				if (_settings.userName.length > 0)
-				{
-					con.flags.userName = true;
-					con.userName = _settings.userName;
-					if (_settings.password.length > 0)
-					{
-						con.flags.password = true;
-						con.password = _settings.password;
-					}
-				}
-
-				this.send(con);
-				_conAckTimer.rearm(5.seconds);
-			}
-			catch (Exception ex)
-			{
-				() @trusted {logError("MQTT Error connecting to the broker: %s", ex);}();
-				disconnectImpl(false);
-			}
+		if (pending)
+		{
+			version(MqttDebug) logDebug("MQTT Broker already Connecting");
+			return;
 		}
 
-		/// Sends Disconnect packet to the broker and closes the underlying connection
-		void disconnect() nothrow
+		//cleanup before reconnects
+		_readBuffer.clear();
+		if (_settings.cleanSession ) _session.clear();
+		_disconnecting = false;
+
+		try
 		{
-			if (this.connected)
+			_con = connectTCP(_settings.host, _settings.port);
+			if(_settings.useSsl)
 			{
-				version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
-
-				this.send(Disconnect());
-				disconnectImpl(true);
-
-				if(Task.getThis !is _listener)
-					try _listener.join; catch (Exception) {}
+				auto sslctx = createTLSContext(TLSContextKind.client);
+				sslctx.peerValidationMode = TLSPeerValidationMode.none;
+				if(_settings.trustedCertificateFile !is null)
+				{
+					sslctx.useTrustedCertificateFile(_settings.trustedCertificateFile);
+				}
+				_stream = createTLSStream(_con, sslctx);
 			}
 			else
 			{
-				version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
-				disconnectImpl(true); // to make sure we stop any reconnect attempts too
+				_stream = new StreamWrapper!TCPConnection(_con);
 			}
-		}
+			_listener = runTask(&listener);
+			_dispatcher = runTask(&dispatcher);
 
+			version(MqttDebug) logDebug("MQTT Broker Connecting");
+
+			auto con = Connect();
+			con.clientIdentifier = _settings.clientId;
+			con.flags.cleanSession = _settings.cleanSession;
+			con.keepAlive = cast(ushort)((_settings.keepAlive * 3) / 2);
+			if (_settings.userName.length > 0)
+			{
+				con.flags.userName = true;
+				con.userName = _settings.userName;
+				if (_settings.password.length > 0)
+				{
+					con.flags.password = true;
+					con.password = _settings.password;
+				}
+			}
+
+			this.send(con);
+			_conAckTimer.rearm(5.seconds);
+		}
+		catch (Exception ex)
+		{
+			() @trusted {logError("MQTT Error connecting to the broker: %s", ex);}();
+			disconnectImpl(false);
+		}
+	}
+
+	/// Sends Disconnect packet to the broker and closes the underlying connection
+	void disconnect() nothrow
+	{
+		if (this.connected)
+		{
+			version(MqttDebug) logDebug("MQTT Disconnecting from Broker");
+
+			this.send(Disconnect());
+			disconnectImpl(true);
+
+			if(Task.getThis !is _listener)
+				try _listener.join; catch (Exception) {}
+		}
+		else
+		{
+			version(MqttDebug) logDebug("MQTT Already Disconnected from Broker");
+			disconnectImpl(true); // to make sure we stop any reconnect attempts too
+		}
+	}
+
+	final
+	{
 		/**
 		 * Return true, if client is in a connected state
 		 */
