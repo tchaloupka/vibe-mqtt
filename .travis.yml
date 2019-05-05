@@ -49,5 +49,3 @@ branches:
 
 notifications:
   email: true
-
-sudo: false
