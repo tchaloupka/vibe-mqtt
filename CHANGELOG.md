@@ -1,6 +1,10 @@
 vibe-mqtt changelog
 ===================
 
+#### v0.2.1
+- Fix reconnect not working when disisconnected during ConnAck timeout
+- Fix possible reconnect segfault when used with old vibe-d:core
+
 #### v0.2.0
 - Fix subscribe to go through session, not directly
 - Fix unittest imports
