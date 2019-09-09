@@ -1036,6 +1036,9 @@ final:
 		stopTimer(_pingReqTimer);
 		stopTimer(_pingRespTimer);
 
+		// stop ConAck timer (if running)
+		stopTimer(_conAckTimer);
+
 		// set reconnect if not forced to disconnect
 		if (!force && _settings.reconnect)
 		{
