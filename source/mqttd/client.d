@@ -1166,7 +1166,7 @@ final:
 		auto buffer = new ubyte[4096];
 
 		size_t size;
-		while (_con.connected)
+		while (this.connected)
 		{
 			{
 				auto lock = scopedMutexLock(_readMutex);
