@@ -980,21 +980,8 @@ final:
 
 		version (MqttDebug) logDebug("MQTT disconnectImpl, connected: %s, force: %s", this.connected, force);
 
-		// try to close the connection stream
-		try
-		{
-			auto rlock = scopedMutexLock(_readMutex);
-			auto wlock = scopedMutexLock(_writeMutex);
-			if (_stream !is null)
-			{
-				_stream.finalize(); // acquires reader + writer
-			}
-		}
-		catch (Exception) {}
-		finally _stream = null;
-
 		// cleanup connection
-		if (_con !is TCPConnection.init)
+		if (_con)
 		{
 			_con.close();
 			_con = TCPConnection.init;
@@ -1123,6 +1110,12 @@ final:
 			scope (exit) logDebug("MQTT Exiting listening loop");
 		}
 
+		scope (exit)
+		{
+			_listener = Task.init;
+			if (!_dispatcher && _stream) { _stream.finalize(); _stream = null; }
+		}
+
 		auto buffer = new ubyte[4096];
 
 		size_t size;
@@ -1153,7 +1146,13 @@ final:
 			scope (exit) logDebug("MQTT Exiting dispatch loop");
 		}
 
-		while (true)
+		scope (exit)
+		{
+			_dispatcher = Task.init;
+			if (!_listener && _stream) { _stream.finalize(); _stream = null; }
+		}
+
+		while (this.connected)
 		{
 			// wait for session state change
 			_session.sendQueue.wait();
