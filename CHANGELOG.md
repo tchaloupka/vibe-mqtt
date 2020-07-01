@@ -5,6 +5,7 @@ vibe-mqtt changelog
 - Droped support for old vibe-d:core
 - Fix disconnect deadlock when no ConAck is received from server
 - Fix possible contract assert when starting listener/dispatcher tasks
+- Support for TLS ALPN extensions by @kubo39
 
 #### v0.2.1
 - Fix reconnect not working when disisconnected during ConnAck timeout
