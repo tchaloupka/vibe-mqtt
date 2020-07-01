@@ -90,6 +90,7 @@ struct Settings
 	bool useSsl = false; /// use SSL/TLS for the connection
 	string trustedCertificateFile = null; /// list of trusted certificates for verifying peer certificates
 	TLSPeerValidationMode peerValidationMode = TLSPeerValidationMode.none; /// mode for verifying peer certificates
+	string[] alpn; /// list of ALPN extension protocols
 
 	// callbacks
 	Callback!ConnAck onConnAck;
@@ -623,6 +624,8 @@ unittest
 				{
 					sslctx.useTrustedCertificateFile(_settings.trustedCertificateFile);
 				}
+				if (_settings.alpn.length)
+					sslctx.setClientALPN(_settings.alpn);
 				_stream = createTLSStream(_con, sslctx);
 			}
 			else
