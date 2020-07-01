@@ -25,12 +25,9 @@ before_install:
   - dub --version
 
 script:
-  - dub test --compiler=${DC} -c vibed-core
-  - dub build --root=examples/publisher/ -c vibed-core
-  - dub build --root=examples/subscriber/ -c vibed-core
-  - dub test --compiler=${DC} -c vibed
-  - dub build --root=examples/publisher/ -c vibed
-  - dub build --root=examples/subscriber/ -c vibed
+  - dub test --compiler=${DC}
+  - dub build --root=examples/publisher/
+  - dub build --root=examples/subscriber/
 
 branches:
   only:
