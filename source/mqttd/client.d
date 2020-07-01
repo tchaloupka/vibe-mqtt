@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MQTT client implementation
  *
  * Author:
@@ -593,15 +593,7 @@ unittest
 		import vibe.core.core: runTask;
 		import vibe.core.net: connectTCP;
 
-		//Workaround for older vibe-core
-		static if (!__traits(compiles, () nothrow { _conAckTimer.pending; } ))
-		{
-			bool pending;
-			try pending = _conAckTimer.pending; catch (Exception) assert(false);
-		}
-		else auto pending = _conAckTimer.pending;
-
-		if (pending)
+		if (_conAckTimer.pending)
 		{
 			version(MqttDebug) logDebug("MQTT Broker already Connecting");
 			return;
@@ -694,13 +686,8 @@ unittest
 		 */
 		@property bool connected() const nothrow
 		{
-			// not nothrow in older vibe-d:core
-			static if (!__traits(compiles, () nothrow { _con.connected; }))
-			{
-				try return !_disconnecting && _con && _con.connected; catch (Exception) return false;
+			return !_disconnecting && _con && _con.connected;
 			}
-			else return !_disconnecting && _con && _con.connected;
-		}
 
 		/**
 		 * Publishes the message on the specified topic
@@ -796,13 +783,7 @@ unittest
 					{
 						if (this.send(PingReq()))
 						{
-							//workaround for older vibe-core
-							static if (!__traits(compiles, () nothrow { _pingRespTimer && _pingRespTimer.pending; }))
-							{
-								try if (_pingRespTimer && _pingRespTimer.pending) return;
-								catch (Exception ex) {}
-							}
-							else if (_pingRespTimer && _pingRespTimer.pending) return;
+							if (_pingRespTimer && _pingRespTimer.pending) return;
 
 							auto timeout = () @safe nothrow
 							{
@@ -810,13 +791,8 @@ unittest
 								this.disconnectImpl(false);
 							};
 
-							static if (!__traits(compiles, () nothrow { setTimer(() @safe nothrow {}); }))
-							{
-								try _pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
-								catch (Exception ex) logError("MQTT failed to set PINGRESP timeout: " ~ ex.msg);
+							_pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
 							}
-							else _pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
-						}
 					}, true);
 			}
 			_session.sendQueue.emit();
@@ -1020,11 +996,7 @@ final:
 		// cleanup connection
 		if (_con !is TCPConnection.init)
 		{
-			static if (!__traits(compiles, () nothrow { _con.close(); }))
-			{
-				try _con.close(); catch(Exception) {} // workaround for old vibe-d:core
-			}
-			else _con.close();
+			_con.close();
 			_con = TCPConnection.init;
 		}
 
@@ -1050,26 +1022,14 @@ final:
 					this.connect();
 				};
 
-			// workaround older vibe-d:core
-			static if (!__traits(compiles, () nothrow { setTimer(() @safe nothrow {}); }))
-			{
-				try _reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
-				catch (Exception ex) logError("MQTT failed to set reconnect: " ~ ex.msg);
-			}
-			else _reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
+			_reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
 		}
 	}
 
 	// nothrow wrapper to ensure timer is stopped
 	static void stopTimer(ref Timer timer) nothrow
 	{
-		// workaround older vibe-d:core
-		static if (!__traits(compiles, timer && timer.pending))
-		{
-			try if (timer && timer.pending) timer.stop();
-			catch (Exception) {}
-		}
-		else if (timer && timer.pending) timer.stop();
+		if (timer && timer.pending) timer.stop();
 	}
 
 	/// Processes data in read buffer. If whole packet is presented, it delegates it to handler
@@ -1309,15 +1269,5 @@ dispatcherFin:
 			}
 		}
 		else return false;
-	}
-
-	// workaround for older vibe-d:core
-	static if (!__traits(compiles, scopedMutexLock))
-	{
-		import core.sync.mutex : Mutex;
-		ScopedMutexLock scopedMutexLock(Mutex mutex, LockMode mode = LockMode.lock) @safe
-		{
-			return ScopedMutexLock(mutex, mode);
-		}
 	}
 }

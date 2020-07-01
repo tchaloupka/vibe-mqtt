@@ -7,12 +7,3 @@ targetType "library"
 
 dependency "vibe-d:core" version="~>0.8.4"
 dependency "vibe-d:tls" version="~>0.8.4"
-
-configuration "vibed-core" {
-	targetType "library"
-	subConfiguration "vibe-d:core" "vibe-core"
-}
-configuration "vibed" {
-	targetType "library"
-	subConfiguration "vibe-d:core" "libevent"
-}

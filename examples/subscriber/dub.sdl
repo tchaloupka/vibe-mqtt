@@ -6,10 +6,3 @@ targetType "executable"
 versions "MqttDebug"
 
 dependency "vibe-mqtt" path="../../"
-
-configuration "vibed-core" {
-	subConfiguration "vibe-mqtt" "vibed-core"
-}
-configuration "vibed" {
-	subConfiguration "vibe-mqtt" "vibed"
-}
