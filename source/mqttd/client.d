@@ -1101,8 +1101,6 @@ final:
 
 	/// loop to receive packets
 	void listener()
-	in { assert(_con && _con.connected); }
-	body
 	{
 		version (MqttDebug)
 		{
@@ -1137,8 +1135,6 @@ final:
 
 	/// loop to dispatch in session stored packets
 	void dispatcher()
-	in { assert(_con && _con.connected); }
-	body
 	{
 		version (MqttDebug)
 		{
