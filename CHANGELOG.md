@@ -1,6 +1,11 @@
 vibe-mqtt changelog
 ===================
 
+#### v0.3.0
+- Droped support for old vibe-d:core
+- Fix disconnect deadlock when no ConAck is received from server
+- Fix possible contract assert when starting listener/dispatcher tasks
+
 #### v0.2.1
 - Fix reconnect not working when disisconnected during ConnAck timeout
 - Fix possible reconnect segfault when used with old vibe-d:core
