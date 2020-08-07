@@ -1,6 +1,10 @@
 vibe-mqtt changelog
 ===================
 
+#### v0.3.1
+- Make vibe-d version dependency more generic
+- Fix still being processed messages when disconnected (could cause problems during reconnects too)
+
 #### v0.3.0
 - Droped support for old vibe-d:core
 - Fix disconnect deadlock when no ConAck is received from server
