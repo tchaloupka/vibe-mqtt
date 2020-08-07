@@ -226,7 +226,7 @@ unittest
 	assert(conack.returnCode == conack2.returnCode);
 	assert(conack.returnCode == ConnectReturnCode.ConnectionAccepted);
 
-	conack2.flags = 0x01;
+	conack2.flags.flags = 0x01;
 	conack2.returnCode = ConnectReturnCode.NotAuthorized;
 	wr.clear();
 

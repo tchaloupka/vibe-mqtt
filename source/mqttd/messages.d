@@ -422,26 +422,26 @@ struct ConnectFlags
 		assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, false));
 		assert(flags == 0);
 
-		flags = 1; //reserved - no change
+		flags.flags = 1; //reserved - no change
 		assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, false));
 		assert(flags == 0);
 
-		flags = 2;
+		flags.flags = 2;
 		assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, false, true));
 
-		flags = 4;
+		flags.flags = 4;
 		assert(flags == ConnectFlags(false, false, false, QoSLevel.QoS0, true, false));
 
-		flags = 24;
+		flags.flags = 24;
 		assert(flags == ConnectFlags(false, false, false, QoSLevel.Reserved, false, false));
 
-		flags = 32;
+		flags.flags = 32;
 		assert(flags == ConnectFlags(false, false, true, QoSLevel.QoS0, false, false));
 
-		flags = 64;
+		flags.flags = 64;
 		assert(flags == ConnectFlags(false, true, false, QoSLevel.QoS0, false, false));
 
-		flags = 128;
+		flags.flags = 128;
 		assert(flags == ConnectFlags(true, false, false, QoSLevel.QoS0, false, false));
 	}
 }
