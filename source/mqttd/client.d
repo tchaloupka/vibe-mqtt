@@ -1028,13 +1028,13 @@ final:
 		import mqttd.serialization;
 		import std.range;
 
-		version(MqttDebug) logTrace("MQTT IN: %(%.02x %)", data);
+		version(MqttDebug) logTrace("MQTT IN: 0x%(%02x%)", data);
 
 		if (_readBuffer.freeSpace < data.length) // ensure all fits to the buffer
 			_readBuffer.capacity = _readBuffer.capacity + data.length;
 		_readBuffer.put(data);
 
-		while (_readBuffer.length > 0)
+		while (_readBuffer.length > 0 && this.connected) // break message processing when disconnected
 		{
 			// try read packet header
 			FixedHeader header = _readBuffer[0]; // type + flags
@@ -1252,7 +1252,7 @@ dispatcherFin:
 			version(MqttDebug)
 			{
 				logDebug("MQTT OUT: %s", msg);
-				logDebugV("MQTT OUT: %(%.02x %)", _sendBuffer.data);
+				logTrace("MQTT OUT: 0x%(%02x%)", _sendBuffer.data);
 			}
 			try
 			{
