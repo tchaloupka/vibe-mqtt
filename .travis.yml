@@ -19,6 +19,9 @@ d:
   - ldc-1.19.0
 
 before_install:
+  - wget https://github.com/dlang/installer/raw/master/script/install.sh -O ~/dlang/install.sh
+  - ~/dlang/install.sh dub-1.22.0
+  - export PATH="$(dirname ~/dlang/dub-*/.)/${PATH:+:}${PATH:-}"
   - dub --version
 
 script:
