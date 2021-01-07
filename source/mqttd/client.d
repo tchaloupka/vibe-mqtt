@@ -86,7 +86,7 @@ struct Settings
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
 	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default).
-	ushort reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
+	Duration reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
 	bool useSsl = false; /// use SSL/TLS for the connection
 	string trustedCertificateFile = null; /// list of trusted certificates for verifying peer certificates
 	TLSPeerValidationMode peerValidationMode = TLSPeerValidationMode.none; /// mode for verifying peer certificates
@@ -1012,7 +1012,7 @@ final:
 					this.connect();
 				};
 
-			_reconnectTimer = setTimer(dur!"seconds"(_settings.reconnect), recon, false);
+			_reconnectTimer = setTimer(_settings.reconnect, recon, false);
 		}
 	}
 
