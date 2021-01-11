@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/tchaloupka/vibe-mqtt.svg?branch=master)](https://travis-ci.org/tchaloupka/vibe-mqtt)
+[![Actions Status](https://github.com/tchaloupka/vibe-mqtt/workflows/ci/badge.svg)](https://github.com/tchaloupka/vibe-mqtt/actions)
 [![Dub downloads](https://img.shields.io/dub/dt/vibe-mqtt.svg)](http://code.dlang.org/packages/vibe-mqtt)
 [![License](https://img.shields.io/dub/l/vibe-mqtt.svg)](http://code.dlang.org/packages/vibe-mqtt)
 [![Latest version](https://img.shields.io/dub/v/vibe-mqtt.svg)](http://code.dlang.org/packages/vibe-mqtt)
