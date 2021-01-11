@@ -15,7 +15,7 @@ void main()
 
 	auto settings = Settings();
 	settings.clientId = "publisher";
-	settings.reconnect = 1;
+	settings.reconnect = 1.seconds;
 	settings.onConnAck = (scope MqttClient ctx, in ConnAck ack)
 	{
 		if (ack.returnCode != ConnectReturnCode.ConnectionAccepted) return;

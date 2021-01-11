@@ -15,7 +15,7 @@ void main()
 
 	auto settings = Settings();
 	settings.clientId = "test subscriber";
-	settings.reconnect = 1;
+	settings.reconnect = 1.seconds;
 	settings.onPublish = (scope MqttClient ctx, in Publish packet)
 	{
 		writeln(packet.topic, ": ", (cast(const char[])packet.payload).idup);
