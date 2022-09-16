@@ -163,7 +163,7 @@ public:
 		assert(result, "packet id can't be 0!");
 		assert(_event);
 	}
-	body
+	do
 	{
 		do
 		{
@@ -363,7 +363,7 @@ private @safe struct SessionQueue(Flag!"send" send)
 			}
 		}
 	}
-	body
+	do
 	{
 		while (_packets.full)
 		{
@@ -589,7 +589,7 @@ unittest
 
 	/// Connects to the specified broker and sends it the Connect packet
 	void connect() @safe nothrow
-	body
+	do
 	{
 		import vibe.core.core: runTask;
 		import vibe.core.net: connectTCP;
