@@ -84,7 +84,7 @@ public:
 		return _stream.read(dst, mode);
 	}
 
-	size_t write(in ubyte[] bytes, IOMode mode) @blocking
+	size_t write(scope const(ubyte)[] bytes, IOMode mode) @blocking
 	{
 		return _stream.write(bytes, mode);
 	}
