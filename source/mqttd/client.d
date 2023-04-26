@@ -632,6 +632,7 @@ unittest
 			{
 				_stream = new StreamWrapper!TCPConnection(_con);
 			}
+			import std.functional;
 			_listener = runTask(&listener);
 			_dispatcher = runTask(&dispatcher);
 
@@ -1103,119 +1104,127 @@ final:
 	}
 
 	/// loop to receive packets
-	void listener()
+	void listener() @safe nothrow
 	{
-		version (MqttDebug)
-		{
-			() @trusted { logDebug("MQTT Entering listening loop - TID:%s", thisTid); }();
-			scope (exit) logDebug("MQTT Exiting listening loop");
-		}
-
-		scope (exit)
-		{
-			_listener = Task.init;
-			if (!_dispatcher && _stream) { _stream.finalize(); _stream = null; }
-		}
-
-		auto buffer = new ubyte[4096];
-
-		size_t size;
-		while (this.connected)
-		{
+		try{
+			version (MqttDebug)
 			{
-				auto lock = scopedMutexLock(_readMutex);
-				if (_stream.empty) break;
-				size = cast(size_t) _stream.leastSize;
-				if (size == 0) break;
-				if (size > buffer.length) size = buffer.length;
-				_stream.read(buffer[0..size]);
+				() @trusted { logDebug("MQTT Entering listening loop - TID:%s", thisTid); }();
+				scope (exit) logDebug("MQTT Exiting listening loop");
 			}
-			proccessData(buffer[0..size]);
-		}
 
-		disconnectImpl(false);
+			scope (exit)
+			{
+				_listener = Task.init;
+				if (!_dispatcher && _stream) { _stream.finalize(); _stream = null; }
+			}
+
+			auto buffer = new ubyte[4096];
+
+			size_t size;
+			while (this.connected)
+			{
+				{
+					auto lock = scopedMutexLock(_readMutex);
+					if (_stream.empty) break;
+					size = cast(size_t) _stream.leastSize;
+					if (size == 0) break;
+					if (size > buffer.length) size = buffer.length;
+					_stream.read(buffer[0..size]);
+				}
+				proccessData(buffer[0..size]);
+			}
+
+			disconnectImpl(false);
+		}
+		catch(Exception e) {
+		}
 	}
 
 	/// loop to dispatch in session stored packets
-	void dispatcher()
+	void dispatcher() @safe nothrow
 	{
-		version (MqttDebug)
-		{
-			() @trusted { logDebug("MQTT Entering dispatch loop - TID:%s", thisTid); }();
-			scope (exit) logDebug("MQTT Exiting dispatch loop");
-		}
-
-		scope (exit)
-		{
-			_dispatcher = Task.init;
-			if (!_listener && _stream) { _stream.finalize(); _stream = null; }
-		}
-
-		while (this.connected)
-		{
-			// wait for session state change
-			_session.sendQueue.wait();
-
-			if (!this.connected) break;
-			if (_conAckTimer.pending) continue; //wait for ConAck before sending any messages
-
-			while (_session.sendQueue.length)
+		try {
+			version (MqttDebug)
 			{
-				// wait for space in inflight queue
-				while (_session.inflightQueue.full)
-				{
-					version (MqttDebug) logDebug("MQTT InflightQueue full, wait before sending next message");
-					_session.inflightQueue.wait();
-					if (!this.connected) goto dispatcherFin; // we can be disconnected in between
-				}
-
-				version (MqttDebug) logDebugV("MQTT Packets in session: send=%s, wait=%s", _session.sendQueue.length, _session.inflightQueue.length);
-				auto ctx = _session.sendQueue.front;
-				final switch (ctx.state)
-				{
-					// QoS0 handling - S:Publish, S:forget
-					case PacketState.queuedQos0: // just send it
-						//Sender request QoS0
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						break;
-
-					// QoS1 handling - S:Publish, R:PubAck
-					case PacketState.queuedQos1:
-						//Sender request QoS1
-						//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
-						assert(ctx.header.qos == QoSLevel.QoS1);
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						ctx.state = PacketState.waitForPuback;
-						_session.inflightQueue.add(ctx);
-						break;
-
-					// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
-					case PacketState.queuedQos2:
-						//Sender request QoS2
-						//treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
-						assert(ctx.header.qos == QoSLevel.QoS2);
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						ctx.state = PacketState.waitForPubrec;
-						_session.inflightQueue.add(ctx);
-						break;
-
-					case PacketState.waitForPuback:
-					case PacketState.waitForPubrec:
-					case PacketState.waitForPubcomp:
-					case PacketState.waitForPubrel:
-						assert(0, "Invalid state");
-				}
-
-				//remove from sendQueue
-				_session.sendQueue.popFront;
+				() @trusted { logDebug("MQTT Entering dispatch loop - TID:%s", thisTid); }();
+				scope (exit) logDebug("MQTT Exiting dispatch loop");
 			}
-		}
 
-dispatcherFin:
-		disconnectImpl(false);
+			scope (exit)
+			{
+				_dispatcher = Task.init;
+				if (!_listener && _stream) { _stream.finalize(); _stream = null; }
+			}
+
+			while (this.connected)
+			{
+				// wait for session state change
+				_session.sendQueue.wait();
+
+				if (!this.connected) break;
+				if (_conAckTimer.pending) continue; //wait for ConAck before sending any messages
+
+				while (_session.sendQueue.length)
+				{
+					// wait for space in inflight queue
+					while (_session.inflightQueue.full)
+					{
+						version (MqttDebug) logDebug("MQTT InflightQueue full, wait before sending next message");
+						_session.inflightQueue.wait();
+						if (!this.connected) goto dispatcherFin; // we can be disconnected in between
+					}
+
+					version (MqttDebug) logDebugV("MQTT Packets in session: send=%s, wait=%s", _session.sendQueue.length, _session.inflightQueue.length);
+					auto ctx = _session.sendQueue.front;
+					final switch (ctx.state)
+					{
+						// QoS0 handling - S:Publish, S:forget
+						case PacketState.queuedQos0: // just send it
+							//Sender request QoS0
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							break;
+
+						// QoS1 handling - S:Publish, R:PubAck
+						case PacketState.queuedQos1:
+							//Sender request QoS1
+							//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
+							assert(ctx.header.qos == QoSLevel.QoS1);
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							ctx.state = PacketState.waitForPuback;
+							_session.inflightQueue.add(ctx);
+							break;
+
+						// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
+						case PacketState.queuedQos2:
+							//Sender request QoS2
+							//treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
+							assert(ctx.header.qos == QoSLevel.QoS2);
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							ctx.state = PacketState.waitForPubrec;
+							_session.inflightQueue.add(ctx);
+							break;
+
+						case PacketState.waitForPuback:
+						case PacketState.waitForPubrec:
+						case PacketState.waitForPubcomp:
+						case PacketState.waitForPubrel:
+							assert(0, "Invalid state");
+					}
+
+					//remove from sendQueue
+					_session.sendQueue.popFront;
+				}
+			}
+
+	dispatcherFin:
+			disconnectImpl(false);
+		}
+		catch(Exception e) {
+		}
 	}
 
 	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)
