@@ -191,7 +191,7 @@ struct FixedHeader
 		return _payload;
 	}
 
-	@property void flags(in ubyte value)
+	@property void flags(const ubyte value)
 	{
 		_payload = value;
 	}
@@ -589,7 +589,7 @@ struct Connect
 	string password;
 }
 
-/// Responce to Connect request
+/// Response to Connect request
 struct ConnAck
 {
 	FixedHeader header = FixedHeader(PacketType.CONNACK, 0, 2);

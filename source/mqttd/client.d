@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MQTT client implementation
  *
  * Author:
@@ -113,6 +113,7 @@ struct Settings
  */
 class PacketIdGenerator
 {
+nothrow:
 private:
 	this()
 	{
@@ -142,14 +143,14 @@ public:
 		// there is no need for synchronization here.
 		if (!instantiated_)
 		{
-			synchronized (PacketIdGenerator.classinfo)
+			assumeWontThrow(()
 			{
-				if (!instance_)
+				synchronized (PacketIdGenerator.classinfo)
 				{
-					instance_ = new PacketIdGenerator();
+					if (!instance_) instance_ = new PacketIdGenerator();
+					instantiated_ = true;
 				}
-				instantiated_ = true;
-			}
+			}());
 		}
 		return instance_;
 	}
@@ -170,7 +171,7 @@ public:
 			if (!_idUsage[].any!(a => a != size_t.max)())
 			{
 				version (MqttDebug) logDiagnostic("MQTT all packet ids in use - waiting");
-				this._event.wait();
+				this._event.waitUninterruptible();
 				continue;
 			}
 
@@ -191,25 +192,23 @@ public:
 
 	/// Sets packet id as used
 	pragma(inline) void setUsed(ushort id)
+	in (!isUsed(id))
+	in (_event)
 	{
-		assert(!isUsed(id));
-		assert(_event);
-
 		_idUsage[getIdx(id)] |= getIdxValue(id);
-		version (unittest) {} //HACK: For some reason unittest will segfault when emiting
+		version (unittest) {} //HACK: For some reason unittest will segfault when emitting
 		else _event.emit();
 	}
 
 	/// Sets packet id as unused
 	pragma(inline) void setUnused(ushort id)
+	in (id != 0)
+	in (isUsed(id))
+	in (_event)
 	{
-		assert(id != 0);
-		assert(isUsed(id));
-		assert(_event);
-
 		_idUsage[getIdx(id)] ^= getIdxValue(id);
 
-		version (unittest) {} //HACK: For some reason unittest will segfault when emiting
+		version (unittest) {} //HACK: For some reason unittest will segfault when emitting
 		else _event.emit();
 	}
 }
@@ -258,15 +257,17 @@ enum PacketOrigin
 /// Context for MQTT packet stored in Session
 private @safe struct MessageContext
 {
+	nothrow:
+
 	~this()
 	{
 		decRef();
 	}
 
 	this(Publish message, PacketState state, PacketOrigin origin = PacketOrigin.client)
+	in (refCount is null)
 	{
-		assert(refcount is null);
-		refcount = new int(1);
+		refCount = new int(1);
 
 		this.timestamp = Clock.currTime;
 		this.state = state;
@@ -278,7 +279,7 @@ private @safe struct MessageContext
 
 	this (this)
 	{
-		if (refcount !is null) *refcount += 1;
+		if (refCount !is null) *refCount += 1;
 	}
 
 	PacketState state; /// message state
@@ -290,15 +291,15 @@ private @safe struct MessageContext
 	alias message this;
 
 private:
-	int* refcount;
+	int* refCount;
 
 	void decRef()
 	{
-		if (refcount !is null)
+		if (refCount !is null)
 		{
-			if ((*refcount -= 1) == 0)
+			if ((*refCount -= 1) == 0)
 			{
-				refcount = null;
+				refCount = null;
 				if (this.origin == PacketOrigin.client && this.packetId)
 					PacketIdGenerator.get.setUnused(this.packetId);
 			}
@@ -309,7 +310,7 @@ private:
 /// Queue storage helper for session
 private @safe struct SessionQueue(Flag!"send" send)
 {
-	this(Settings settings)
+	this(Settings settings) nothrow
 	{
 		_event = createManualEvent();
 
@@ -395,8 +396,8 @@ private @safe struct SessionQueue(Flag!"send" send)
 			}
 		}
 
-		static if (send) assert(!_packets.full, format("SEND %s", ctx));
-		else assert(!_packets.full, format("WAIT %s", ctx));
+		static if (send) assert(!_packets.full, format!"SEND %s"(ctx));
+		else assert(!_packets.full, format!"WAIT %s"(ctx));
 
 		_packets.put(ctx);
 		_event.emit();
@@ -417,34 +418,41 @@ private @safe struct SessionQueue(Flag!"send" send)
 	}
 
 	/// Manually emit session state change to all listeners
-	auto emit()
+	auto emit() nothrow
 	{
 		return _event.emit();
 	}
 
 	/// Removes the stored PacketContext
-	void removeAt(size_t idx)
+	void removeAt(size_t idx) nothrow
 	{
 		assert(idx < this.length);
 
-		_packets.removeAt(_packets[idx..idx+1]);
+		assumeWontThrow(_packets.removeAt(_packets[idx..idx+1]));
 		_event.emit();
 	}
 
 	/// Finds package context stored in session
-	auto canFind(ushort packetId, out size_t idx, PacketState[] state...)
+	auto canFind(ushort packetId, out size_t idx, PacketState[] state...) nothrow
 	{
-		import alg = std.algorithm : canFind;
-		foreach (i, ref c; _packets)
+		try
 		{
-			if (c.packetId == packetId && (!state.length || alg.canFind!(a => a == c.state)(state)))
+			import alg = std.algorithm : canFind;
+			foreach (i, ref c; _packets)
 			{
-				idx = i;
-				return true;
+				if (c.packetId == packetId && (!state.length || alg.canFind!(a => a == c.state)(state)))
+				{
+					idx = i;
+					return true;
+				}
 			}
-		}
 
-		return false;
+			return false;
+		}
+		catch (Exception ex)
+		{
+			assert(0, format!"FixedRingBuffer.opApply is assumed to be nothrow, but throws: %s"(ex.msg));
+		}
 	}
 
 nothrow:
@@ -618,15 +626,15 @@ unittest
 			_con = connectTCP(_settings.host, _settings.port);
 			if(_settings.useSsl)
 			{
-				auto sslctx = createTLSContext(TLSContextKind.client);
-				sslctx.peerValidationMode = TLSPeerValidationMode.none;
+				auto sslCtx = createTLSContext(TLSContextKind.client);
+				sslCtx.peerValidationMode = TLSPeerValidationMode.none;
 				if(_settings.trustedCertificateFile !is null)
 				{
-					sslctx.useTrustedCertificateFile(_settings.trustedCertificateFile);
+					sslCtx.useTrustedCertificateFile(_settings.trustedCertificateFile);
 				}
 				if (_settings.alpn.length)
-					sslctx.setClientALPN(_settings.alpn);
-				_stream = createTLSStream(_con, sslctx);
+					sslCtx.setClientALPN(_settings.alpn);
+				_stream = createTLSStream(_con, sslCtx);
 			}
 			else
 			{
@@ -750,7 +758,7 @@ unittest
 		 *      topics = Array of topic filters to unsubscribe from
 		 *
 		 */
-		void unsubscribe(const string[] topics...)
+		void unsubscribe(const string[] topics...) nothrow
 		{
 			auto unsub = Unsubscribe();
 			unsub.packetId = _unsubId = PacketIdGenerator.get.nextPacketId();
@@ -842,9 +850,9 @@ unittest
 	{
 		size_t idx;
 		immutable found = _session.inflightQueue.canFind(packet.packetId, idx,
-			PacketState.waitForPubrec, PacketState.waitForPubcomp); // Both states to handle possible resends of unanswered PubRec packets
+			PacketState.waitForPubrec, PacketState.waitForPubcomp); // Both states to handle possible resubmission of unanswered PubRec packets
 
-		//MUST send a PUBREL packet when it receives a PUBREC packet from the receiver.
+		// MUST send a PUBREL packet when it receives a PUBREC packet from the receiver.
 		this.send(PubRel(packet.packetId)); //send directly to avoid lock on filled sendQueue
 
 		if (found)
@@ -858,7 +866,7 @@ unittest
 		if (_settings.onPubRec) _settings.onPubRec(this, packet);
 	}
 
-	/// Confirmation that message was succesfully delivered (Sender side)
+	/// Confirmation that message was successfully delivered (Sender side)
 	void onPubComp(PubComp packet)
 	{
 		size_t idx;
@@ -913,7 +921,7 @@ unittest
 		if (_settings.onPublish) _settings.onPublish(this, packet);
 	}
 
-	/// Message was succesfully delivered to broker
+	/// Message was successfully delivered to broker
 	void onSubAck(SubAck packet)
 	{
 		if (packet.packetId == _subId)
@@ -977,7 +985,7 @@ final:
 		// we need to stop reconnect timer even if we are already disconnected
 		if (force) stopTimer(_reconnectTimer);
 
-		if (_disconnecting) return; // already in process of disconnecting (aditional calls caused by cleanups)
+		if (_disconnecting) return; // already in process of disconnecting (additional calls caused by cleanups)
 		_disconnecting = true;
 		scope (exit) onDisconnect(); // call onDisconnect after cleanup
 
@@ -1023,7 +1031,7 @@ final:
 	}
 
 	/// Processes data in read buffer. If whole packet is presented, it delegates it to handler
-	void proccessData(in ubyte[] data)
+	void processData(scope const (ubyte)[] data)
 	{
 		import mqttd.serialization;
 		import std.range;
@@ -1103,7 +1111,7 @@ final:
 	}
 
 	/// loop to receive packets
-	void listener()
+	void listener() nothrow
 	{
 		version (MqttDebug)
 		{
@@ -1111,33 +1119,42 @@ final:
 			scope (exit) logDebug("MQTT Exiting listening loop");
 		}
 
-		scope (exit)
-		{
-			_listener = Task.init;
-			if (!_dispatcher && _stream) { _stream.finalize(); _stream = null; }
-		}
-
 		auto buffer = new ubyte[4096];
 
 		size_t size;
 		while (this.connected)
 		{
+			try
 			{
-				auto lock = scopedMutexLock(_readMutex);
-				if (_stream.empty) break;
-				size = cast(size_t) _stream.leastSize;
-				if (size == 0) break;
-				if (size > buffer.length) size = buffer.length;
-				_stream.read(buffer[0..size]);
+				{
+					auto lock = scopedMutexLock(_readMutex);
+					if (_stream.empty) break;
+					size = cast(size_t) _stream.leastSize;
+					if (size == 0) break;
+					if (size > buffer.length) size = buffer.length;
+					_stream.read(buffer[0..size]);
+				}
+				processData(buffer[0..size]);
 			}
-			proccessData(buffer[0..size]);
+			catch (Exception ex)
+			{
+				logError("MQTT Error processing incoming data: %s", ex.msg);
+				break;
+			}
 		}
 
 		disconnectImpl(false);
+
+		_listener = Task.init;
+		if (!_dispatcher && _stream)
+		{
+			try _stream.finalize(); catch (Exception) {}
+			_stream = null;
+		}
 	}
 
 	/// loop to dispatch in session stored packets
-	void dispatcher()
+	void dispatcher() nothrow
 	{
 		version (MqttDebug)
 		{
@@ -1145,77 +1162,89 @@ final:
 			scope (exit) logDebug("MQTT Exiting dispatch loop");
 		}
 
-		scope (exit)
-		{
-			_dispatcher = Task.init;
-			if (!_listener && _stream) { _stream.finalize(); _stream = null; }
-		}
-
 		while (this.connected)
 		{
-			// wait for session state change
-			_session.sendQueue.wait();
-
-			if (!this.connected) break;
-			if (_conAckTimer.pending) continue; //wait for ConAck before sending any messages
-
-			while (_session.sendQueue.length)
+			try
 			{
-				// wait for space in inflight queue
-				while (_session.inflightQueue.full)
+				// wait for session state change
+				_session.sendQueue.wait();
+
+				if (!this.connected) break;
+				if (_conAckTimer.pending) continue; //wait for ConAck before sending any messages
+
+				while (_session.sendQueue.length)
 				{
-					version (MqttDebug) logDebug("MQTT InflightQueue full, wait before sending next message");
-					_session.inflightQueue.wait();
-					if (!this.connected) goto dispatcherFin; // we can be disconnected in between
+					// wait for space in inflight queue
+					while (_session.inflightQueue.full)
+					{
+						version (MqttDebug) logDebug("MQTT InflightQueue full, wait before sending next message");
+						_session.inflightQueue.wait();
+						if (!this.connected) goto dispatcherFin; // we can be disconnected in between
+					}
+
+					version (MqttDebug)
+						logDebugV("MQTT Packets in session: send=%s, wait=%s",
+							_session.sendQueue.length, _session.inflightQueue.length);
+
+					auto ctx = _session.sendQueue.front;
+					final switch (ctx.state)
+					{
+						// QoS0 handling - S:Publish, S:forget
+						case PacketState.queuedQos0: // just send it
+							//Sender request QoS0
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							break;
+
+						// QoS1 handling - S:Publish, R:PubAck
+						case PacketState.queuedQos1:
+							//Sender request QoS1
+							//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
+							assert(ctx.header.qos == QoSLevel.QoS1);
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							ctx.state = PacketState.waitForPuback;
+							_session.inflightQueue.add(ctx);
+							break;
+
+						// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
+						case PacketState.queuedQos2:
+							//Sender request QoS2
+							//treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
+							assert(ctx.header.qos == QoSLevel.QoS2);
+							assert(ctx.origin == PacketOrigin.client);
+							this.send(ctx.message);
+							ctx.state = PacketState.waitForPubrec;
+							_session.inflightQueue.add(ctx);
+							break;
+
+						case PacketState.waitForPuback:
+						case PacketState.waitForPubrec:
+						case PacketState.waitForPubcomp:
+						case PacketState.waitForPubrel:
+							assert(0, "Invalid state");
+					}
+
+					//remove from sendQueue
+					_session.sendQueue.popFront;
 				}
-
-				version (MqttDebug) logDebugV("MQTT Packets in session: send=%s, wait=%s", _session.sendQueue.length, _session.inflightQueue.length);
-				auto ctx = _session.sendQueue.front;
-				final switch (ctx.state)
-				{
-					// QoS0 handling - S:Publish, S:forget
-					case PacketState.queuedQos0: // just send it
-						//Sender request QoS0
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						break;
-
-					// QoS1 handling - S:Publish, R:PubAck
-					case PacketState.queuedQos1:
-						//Sender request QoS1
-						//treat the Packet as “unacknowledged” until the corresponding PUBACK packet received
-						assert(ctx.header.qos == QoSLevel.QoS1);
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						ctx.state = PacketState.waitForPuback;
-						_session.inflightQueue.add(ctx);
-						break;
-
-					// QoS2 handling - S:Publish, R: PubRec, S: PubRel, R: PubComp
-					case PacketState.queuedQos2:
-						//Sender request QoS2
-						//treat the PUBLISH packet as “unacknowledged” until it has received the corresponding PUBREC packet from the receiver.
-						assert(ctx.header.qos == QoSLevel.QoS2);
-						assert(ctx.origin == PacketOrigin.client);
-						this.send(ctx.message);
-						ctx.state = PacketState.waitForPubrec;
-						_session.inflightQueue.add(ctx);
-						break;
-
-					case PacketState.waitForPuback:
-					case PacketState.waitForPubrec:
-					case PacketState.waitForPubcomp:
-					case PacketState.waitForPubrel:
-						assert(0, "Invalid state");
-				}
-
-				//remove from sendQueue
-				_session.sendQueue.popFront;
+			}
+			catch (Exception ex)
+			{
+				logError("MQTT Error dispatching data: %s", ex.msg);
+				break;
 			}
 		}
 
 dispatcherFin:
 		disconnectImpl(false);
+
+		_dispatcher = Task.init;
+		if (!_listener && _stream)
+		{
+			try _stream.finalize(); catch (Exception) {}
+			_stream = null;
+		}
 	}
 
 	auto send(T)(auto ref T msg) nothrow if (isMqttPacket!T)

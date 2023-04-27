@@ -57,13 +57,13 @@ struct Serializer(R) if (canSerializeTo!(R))
 	}
 
 	@safe
-	void put(in ubyte val)
+	void put(const ubyte val)
 	{
 		_output.put(val);
 	}
 
 	@safe
-	void put(in ubyte[] val)
+	void put(scope const(ubyte)[] val)
 	{
 		_output.put(val);
 	}
@@ -372,7 +372,9 @@ void validate(T)(auto ref in T packet) pure
 		import std.string : representation;
 
 		if (packet.clientIdentifier.length == 0)
-			enforce(packet.flags.cleanSession, "If the Client supplies a zero-byte ClientId, the Client MUST also set CleanSession to 1");
+			enforce(
+				packet.flags.cleanSession,
+				"If the Client supplies a zero-byte ClientId, the Client MUST also set CleanSession to 1");
 
 		// note that some broker implementations MAY not support client identifiers with more than 23 encoded bytes - http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc385349242
 	}
@@ -390,7 +392,7 @@ void validate(T)(auto ref in T packet) pure
 		enforce(packet.protocolName == MQTT_PROTOCOL_NAME,
 			format("Wrong protocol name '%s', must be '%s'", packet.protocolName, MQTT_PROTOCOL_NAME));
 		enforce(packet.protocolLevel == MQTT_PROTOCOL_LEVEL_3_1_1,
-			format("Unsuported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
+			format("Unsupported protocol level '%d', must be '%d' (v3.1.1)", packet.protocolLevel, MQTT_PROTOCOL_LEVEL_3_1_1));
 		packet.flags.validate();
 		enforce(!packet.flags.userName || packet.userName.length > 0, "Username not set");
 		enforce(packet.flags.userName || !packet.flags.password > 0, "Username not set, but password is");

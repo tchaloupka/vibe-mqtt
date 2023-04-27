@@ -1,6 +1,7 @@
 import std.datetime;
 import std.conv;
 import std.array;
+import std.exception;
 import std.stdio;
 import std.string : format;
 
@@ -27,16 +28,16 @@ void main()
 		ctx.subscribe(["chat/#"], QoSLevel.QoS2);
 
 		// unsubscribe after 15 seconds
-		runTask(()
+		runTask(() nothrow
 			{
-				sleep(15.seconds());
+				assumeWontThrow(sleep(15.seconds()));
 				ctx.unsubscribe("chat/#");
 			});
 
 		// disconnect after 20 seconds
-		runTask(()
+		runTask(() nothrow
 			{
-				sleep(20.seconds());
+				assumeWontThrow(sleep(20.seconds()));
 				ctx.disconnect();
 			});
 	};
