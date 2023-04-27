@@ -269,7 +269,7 @@ private @safe struct MessageContext
 	{
 		refCount = new int(1);
 
-		this.timestamp = Clock.currTime;
+		this.timestamp = assumeWontThrow(Clock.currTime); // Note: currTime is not marked as nothrow in older compilers
 		this.state = state;
 		this.origin = origin;
 		this.message = message;
