@@ -62,9 +62,6 @@ enum MQTT_DEFAULT_CLIENT_ID = "vibe-mqtt"; /// default client identifier
 enum MQTT_DEFAULT_RETRY_DELAY = 10_000u; /// retry interval to resend publish (QoS 1 or 2), subscribe and unsubscribe messages [ms]
 enum MQTT_DEFAULT_RETRY_ATTEMPTS = 3u; /// max publish, subscribe and unsubscribe retry for QoS Level 1 or 2
 
-// aliases
-alias SessionContainer = FixedRingBuffer!(MessageContext);
-
 template Callback(T...)
 {
 	static if (T.length == 1) alias Callback = void delegate(scope MqttClient ctx, in T packet) @safe;
@@ -85,7 +82,7 @@ struct Settings
 	bool cleanSession = true; /// clean client and server session state on connect
 	size_t sendQueueSize = MQTT_DEFAULT_SENDQUEUE_SIZE; /// maximal number of packets stored in queue to send
 	size_t inflightQueueSize = MQTT_DEFAULT_INFLIGHTQUEUE_SIZE; /// maximal number of packets which can be processed at the same time
-	ushort keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default).
+	Duration keepAlive; /// The Keep Alive is a time interval [s] to send control packets to server. It's used to determine that the network and broker are working. If set to 0, no control packets are send automatically (default).
 	Duration reconnect; /// Time interval [s] in which client tries to reconnect to broker if disconnected. If set to 0, auto reconnect is disabled (default)
 	bool useSsl = false; /// use SSL/TLS for the connection
 	string trustedCertificateFile = null; /// list of trusted certificates for verifying peer certificates
@@ -265,46 +262,198 @@ private @safe struct MessageContext
 	}
 
 	this(Publish message, PacketState state, PacketOrigin origin = PacketOrigin.client)
-	in (refCount is null)
 	{
-		refCount = new int(1);
-
-		this.timestamp = assumeWontThrow(Clock.currTime); // Note: currTime is not marked as nothrow in older compilers
-		this.state = state;
-		this.origin = origin;
-		this.message = message;
+		pay = new Payload(1);
+		pay.timestamp = assumeWontThrow(Clock.currTime); // Note: currTime is not marked as nothrow in older compilers
+		pay.state = state;
+		pay.origin = origin;
+		pay.message = message;
 		if (origin == PacketOrigin.client && state != PacketState.queuedQos0)
-			this.message.packetId = PacketIdGenerator.get.nextPacketId();
+			pay.message.packetId = PacketIdGenerator.get.nextPacketId();
 	}
 
-	this (this)
+	this(ref return scope MessageContext rhs)
 	{
-		if (refCount !is null) *refCount += 1;
+		if (rhs.pay)
+		{
+			pay = rhs.pay;
+			pay.refs++;
+		}
 	}
 
-	PacketState state; /// message state
-	uint attempt; /// Attempt (for retry)
-	SysTime timestamp; /// Timestamp (for retry)
-	PacketOrigin origin; /// message origin
-	Publish message; /// message itself
+	@property ref Publish message() { assert(pay !is null); return pay.message; }
+	@property PacketState state() const { assert(pay !is null); return pay.state; }
+	@property void state(PacketState s) { assert(pay !is null); pay.state = s; }
+	@property PacketOrigin origin() const { assert(pay !is null); return pay.origin; }
+	@property uint attempt() const { assert(pay !is null); return pay.attempt; }
+	@property SysTime timestamp() const { assert(pay !is null); return pay.timestamp; }
 
 	alias message this;
 
 private:
-	int* refCount;
+
+	struct Payload
+	{
+		size_t refs;
+		PacketState state; /// message state
+		uint attempt; /// Attempt (for retry)
+		SysTime timestamp; /// Timestamp (for retry)
+		PacketOrigin origin; /// message origin
+		Publish message; /// message itself
+	}
+
+	Payload* pay;
 
 	void decRef()
 	{
-		if (refCount !is null)
+		if (pay !is null)
 		{
-			if ((*refCount -= 1) == 0)
+			if (--pay.refs == 0)
 			{
-				refCount = null;
-				if (this.origin == PacketOrigin.client && this.packetId)
-					PacketIdGenerator.get.setUnused(this.packetId);
+				if (pay.origin == PacketOrigin.client && pay.message.packetId)
+					PacketIdGenerator.get.setUnused(pay.message.packetId);
+				destroy(pay);
+				pay = null;
 			}
 		}
 	}
+}
+
+private struct SessionContainer
+{
+	@safe nothrow:
+	this(size_t capacity)
+	{
+		_buf = new MessageContext[capacity];
+	}
+
+	~this()
+	{
+		clear();
+	}
+
+	@property bool empty() const @nogc pure { return _fill == 0; }
+
+	@property bool full() const @nogc pure { return _fill == _buf.length; }
+
+	@property size_t length() const @nogc pure { return _fill; }
+
+	@property ref inout(MessageContext) front() inout pure @nogc { assert(_fill != 0); return _buf[_start]; }
+
+	ref inout(MessageContext) opIndex(size_t idx) inout pure @nogc { assert(idx < _fill); return _buf[mod(_start+idx)]; }
+
+	void put()(auto ref MessageContext itm) { assert(_fill < _buf.length); _buf[mod(_start + _fill++)] = itm; }
+
+	void popFront()
+	in (!empty)
+	in (_start < _buf.length)
+	{
+		destroy(_buf[_start]);
+		_start = mod(_start+1);
+		_fill--;
+	}
+
+	void clear()
+	out (; _fill == 0)
+	out (; _start == 0)
+	{
+		foreach (_; 0.._fill) popFront();
+		_start = 0;
+	}
+
+	void removeAt(size_t idx)
+	in (idx < _fill)
+	{
+		if (idx == _start) { popFront(); return; }
+		if (idx+1 == _fill)
+		{
+			destroy(_buf[mod(_start + --_fill)]);
+			return;
+		}
+
+		foreach (i; idx.._fill-1)
+			_buf[mod(_start+i)] = _buf[mod(_start+i+1)];
+
+		destroy(_buf[mod(_start + --_fill)]);
+	}
+
+	int opApply(scope int delegate(size_t i, ref MessageContext itm) @safe nothrow del)
+	{
+		if (_start + _fill > _buf.length )
+		{
+			foreach (i; _start .. _buf.length)
+				if (auto ret = del(i - _start, _buf[i]))
+					return ret;
+			foreach (i; 0 .. mod(_start + _fill))
+				if (auto ret = del(i + _buf.length - _start, _buf[i]))
+					return ret;
+		}
+		else
+		{
+			foreach (i; _start .. _start + _fill)
+				if (auto ret = del(i - _start, _buf[i]))
+					return ret;
+		}
+		return 0;
+	}
+
+	private:
+	size_t _fill, _start;
+	MessageContext[] _buf;
+
+	pragma(inline, true)
+	size_t mod(size_t n) const pure @nogc { return n % _buf.length; }
+}
+
+unittest
+{
+	SessionContainer s = SessionContainer(3);
+	assert(s._fill == 0);
+	assert(s._start == 0);
+	s.put(MessageContext(Publish.init, PacketState.queuedQos1));
+	assert(s._fill == 1);
+	assert(s._start == 0);
+	assert(!s.empty);
+	assert(s.length == 1);
+	assert(!s.full);
+	s.popFront();
+	assert(s._fill == 0);
+	assert(s._start == 1);
+	assert(s.empty);
+	assert(s.length == 0);
+	assert(!s.full);
+	auto msg = MessageContext(Publish.init, PacketState.queuedQos1);
+	assert(msg.pay.refs == 1);
+	s.put(msg);
+	assert(msg.pay.refs == 2);
+	s.popFront();
+	assert(msg.pay.refs == 1);
+	assert(s._fill == 0);
+	assert(s._start == 2);
+	s.put(msg);
+	s.put(msg);
+	s.put(msg);
+	assert(s._fill == 3);
+	assert(s._start == 2);
+	s.popFront();
+	assert(s._fill == 2);
+	assert(s._start == 0);
+	s.clear();
+	assert(msg.pay.refs == 1);
+	assert(s._fill == 0);
+	assert(s._start == 0);
+	s.put(MessageContext(Publish.init, PacketState.queuedQos2));
+	s.put(MessageContext(Publish.init, PacketState.queuedQos2));
+	s.put(msg);
+	assert(s[0].packetId != s[1].packetId);
+	assert(s[0].packetId != s[2].packetId);
+	assert(s[1].packetId != s[2].packetId);
+	assert(s[2].pay is msg.pay);
+	auto id = s[0].packetId;
+	s.removeAt(1);
+	assert(s.front.packetId == id);
+	assert(s[1].packetId == msg.packetId);
+	assert(s._buf[2].pay is null);
 }
 
 /// Queue storage helper for session
@@ -425,10 +574,9 @@ private @safe struct SessionQueue(Flag!"send" send)
 
 	/// Removes the stored PacketContext
 	void removeAt(size_t idx) nothrow
+	in (idx < length)
 	{
-		assert(idx < this.length);
-
-		assumeWontThrow(_packets.removeAt(_packets[idx..idx+1]));
+		_packets.removeAt(idx);
 		_event.emit();
 	}
 
@@ -648,7 +796,7 @@ unittest
 			auto con = Connect();
 			con.clientIdentifier = _settings.clientId;
 			con.flags.cleanSession = _settings.cleanSession;
-			con.keepAlive = cast(ushort)((_settings.keepAlive * 3) / 2);
+			con.keepAlive = cast(ushort)((_settings.keepAlive.total!"seconds" * 3) / 2);
 			if (_settings.userName.length > 0)
 			{
 				con.flags.userName = true;
@@ -742,7 +890,7 @@ unittest
 
 			if (this.send(sub))
 			{
-				_subAckTimer = setTimer(dur!"msecs"(1_000),
+				_subAckTimer = setTimer(1_000.msecs,
 					() @safe nothrow
 					{
 						logError("MQTT Server didn't respond with SUBACK - disconnecting");
@@ -766,7 +914,7 @@ unittest
 
 			if (this.send(unsub))
 			{
-				_unsubAckTimer = setTimer(dur!"msecs"(1_000),
+				_unsubAckTimer = setTimer(1_000.msecs,
 					() @safe nothrow
 					{
 						logError("MQTT Server didn't respond with UNSUBACK - disconnecting");
@@ -787,9 +935,9 @@ unittest
 		{
 			version(MqttDebug) logDebug("MQTT Connection accepted");
 			_conAckTimer.stop();
-			if (_settings.keepAlive)
+			if (_settings.keepAlive != Duration.zero)
 			{
-				_pingReqTimer = setTimer(dur!"seconds"(_settings.keepAlive),
+				_pingReqTimer = setTimer(_settings.keepAlive,
 					() @safe nothrow
 					{
 						if (this.send(PingReq()))
@@ -802,8 +950,9 @@ unittest
 								this.disconnectImpl(false);
 							};
 
-							_pingRespTimer = setTimer(dur!"seconds"(10), timeout, false);
-							}
+							if (_pingRespTimer) _pingRespTimer.rearm(10.seconds);
+							else _pingRespTimer = setTimer(10.seconds, timeout, false);
+						}
 					}, true);
 			}
 			_session.sendQueue.emit();
@@ -1005,6 +1154,10 @@ final:
 		// stop ping timers
 		stopTimer(_pingReqTimer);
 		stopTimer(_pingRespTimer);
+
+		// stop sub timers
+		stopTimer(_subAckTimer);
+		stopTimer(_unsubAckTimer);
 
 		// stop ConAck timer (if running)
 		stopTimer(_conAckTimer);
