@@ -320,7 +320,7 @@ private:
 
 /// Gets required buffer size to encode into
 @safe @nogc
-uint itemLength(T)(auto ref in T item) pure nothrow
+uint itemLength(T)(auto ref scope const T item) pure nothrow
 {
 	import std.traits : isDynamicArray;
 
@@ -344,7 +344,7 @@ uint itemLength(T)(auto ref in T item) pure nothrow
 }
 
 @safe
-void validate(T)(auto ref in T packet) pure
+void validate(T)(auto ref scope const T packet) pure
 {
 	import std.string : format;
 	import std.exception : enforce;
