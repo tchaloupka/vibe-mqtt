@@ -6,4 +6,5 @@ license "BSL-1.0"
 targetType "library"
 
 dependency "vibe-d:tls" version="~>0.8"
+dependency "vibe-d:stream" version="~>0.8"
 dependency "vibe-d:utils" version="~>0.8"

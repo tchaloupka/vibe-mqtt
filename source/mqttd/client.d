@@ -41,6 +41,7 @@ import std.string : format, representation;
 import std.traits;
 import std.typecons : Flag, No, Yes;
 
+import vibe.container.ringbuffer : RingBuffer;
 import vibe.core.concurrency;
 import vibe.core.log;
 import vibe.core.net: TCPConnection;
@@ -1120,7 +1121,7 @@ private:
 	Session _session;
 	Task _listener, _dispatcher;
 	Serializer!(Appender!(ubyte[])) _sendBuffer;
-	FixedRingBuffer!ubyte _readBuffer;
+    RingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
 	bool _disconnecting;
 	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer, _reconnectTimer;
