@@ -33,7 +33,8 @@ jobs:
           compiler: ${{ matrix.dc }}
           dub: 1.38.1
     - name: Run tests
+      shell: bash
       run: |
-        dub test --compiler=${DC}
+        dub test
         dub build --root=examples/publisher/
         dub build --root=examples/subscriber/
