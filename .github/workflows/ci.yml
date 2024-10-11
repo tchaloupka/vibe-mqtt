@@ -22,6 +22,8 @@ jobs:
           - { os: ubuntu-latest, dc: dmd-2.094.2, arch: x86_64 }
           - { os: ubuntu-latest, dc: dmd-2.091.1, arch: x86_64 }
           - { os: ubuntu-latest, dc: ldc-1.20.1, arch: x86_64 }
+        exclude:
+          - { os: macOS-latest, dc: dmd-latest }
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
