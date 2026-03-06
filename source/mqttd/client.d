@@ -769,6 +769,7 @@ unittest
 		_readBuffer.clear();
 		if (_settings.cleanSession ) _session.clear();
 		_disconnecting = false;
+		++_connectEpoch;
 
 		try
 		{
@@ -1124,6 +1125,7 @@ private:
     RingBuffer!ubyte _readBuffer;
 	ubyte[] _packetBuffer;
 	bool _disconnecting;
+	uint _connectEpoch;
 	Timer _conAckTimer, _subAckTimer, _unsubAckTimer, _pingReqTimer, _pingRespTimer, _reconnectTimer;
 	ushort _subId, _unsubId;
 	RecursiveTaskMutex _readMutex, _writeMutex;
@@ -1273,6 +1275,7 @@ final:
 			scope (exit) logDebug("MQTT Exiting listening loop");
 		}
 
+		auto myEpoch = _connectEpoch;
 		auto buffer = new ubyte[4096];
 
 		size_t size;
@@ -1297,6 +1300,11 @@ final:
 			}
 		}
 
+		// Only do cleanup if this connection is still current.
+		// A new connect() may have already started, in which case
+		// our disconnectImpl would interfere with it.
+		if (myEpoch != _connectEpoch) return;
+
 		disconnectImpl(false);
 
 		_listener = Task.init;
@@ -1316,6 +1324,7 @@ final:
 			scope (exit) logDebug("MQTT Exiting dispatch loop");
 		}
 
+		auto myEpoch = _connectEpoch;
 		while (this.connected)
 		{
 			try
@@ -1391,6 +1400,9 @@ final:
 		}
 
 dispatcherFin:
+		// Only do cleanup if this connection is still current.
+		if (myEpoch != _connectEpoch) return;
+
 		disconnectImpl(false);
 
 		_dispatcher = Task.init;
