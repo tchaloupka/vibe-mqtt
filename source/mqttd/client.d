@@ -1212,8 +1212,10 @@ final:
 				if (++pos >= _readBuffer.length) return; // not enough data
 				digit = _readBuffer[pos];
 				header.length += ((digit & 127) * multiplier);
-				multiplier *= 128;
+				// per MQTT spec the bounds check must run before the multiply, else a valid
+				// 4-byte remaining length (payload > ~2MB) overshoots and is wrongly rejected.
 				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
+				multiplier *= 128;
 			} while ((digit & 128) != 0);
 
 			if (_readBuffer.length < header.length + pos + 1) return; // not enough data

@@ -138,6 +138,19 @@ unittest
 	assert(header.type == PacketType.CONNACK);
 	assert(header.flags == 0x20);
 	assert(header.length == 256);
+
+	// 4-byte remaining length (payload > 2MB) must parse, not be rejected as malformed
+	header = [0x30, 0x80, 0x80, 0x80, 0x03].deserializer.read!FixedHeader();
+	assert(header.type == PacketType.PUBLISH);
+	assert(header.length == 6_291_456);
+
+	// maximum valid remaining length (268435455)
+	header = [0x30, 0xFF, 0xFF, 0xFF, 0x7F].deserializer.read!FixedHeader();
+	assert(header.length == 268_435_455);
+
+	// a 5th continuation byte is malformed
+	import std.exception : assertThrown;
+	assertThrown!PacketFormatException([0x30, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F].deserializer.read!FixedHeader());
 }
 
 /// ConnectFlags test

@@ -250,8 +250,10 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
 			{
 				digit = read!ubyte();
 				res.length += ((digit & 127) * multiplier);
-				multiplier *= 128;
+				// per MQTT spec the bounds check must run before the multiply, else a valid
+				// 4-byte remaining length (payload > ~2MB) overshoots and is wrongly rejected.
 				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
+				multiplier *= 128;
 			} while ((digit & 128) != 0);
 
 			//set remaining length for calculations
