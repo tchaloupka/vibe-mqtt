@@ -1,6 +1,29 @@
 vibe-mqtt changelog
 ===================
 
+#### v1.1.1
+- Fix race condition in reconnect where a stale listener/dispatcher task could tear down a freshly established connection
+- Fix remaining length decode rejecting valid 4-byte lengths (payloads > 2 MB); the guard now rejects only an illegal 5th byte (#41)
+
+#### v1.1.0
+- Update `vibe-d:utils` dependency version
+- Update CI (#39)
+
+#### v1.0.1
+- Update dub.sdl (relax dependency constraints)
+
+#### v1.0.0
+- Expose `Duration` as type for reconnects
+- More deterministic cleanup of buffered messages
+- Fix compatibility with the latest vibe-d changes
+- Fix `Throwable`/`currTime` handling for older compilers
+- Fix examples after reconnect changes
+- Switch CI from TravisCI to GitHub Actions
+- Fix newer compiler warnings
+
+#### v0.3.2
+- Replace deprecated `body` keyword with `do`
+
 #### v0.3.1
 - Make vibe-d version dependency more generic
 - Fix still being processed messages when disconnected (could cause problems during reconnects too)
