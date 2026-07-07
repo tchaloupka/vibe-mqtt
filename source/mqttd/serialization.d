@@ -248,10 +248,11 @@ struct Deserializer(R) if (canDeserializeFrom!(R))
 			ubyte digit;
 			do
 			{
+				// remaining length is at most 4 bytes; multiplier > 128^3 means an illegal 5th byte
+				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
 				digit = read!ubyte();
 				res.length += ((digit & 127) * multiplier);
 				multiplier *= 128;
-				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
 			} while ((digit & 128) != 0);
 
 			//set remaining length for calculations

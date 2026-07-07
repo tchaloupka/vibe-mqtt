@@ -1209,11 +1209,12 @@ final:
 			ubyte digit;
 			do
 			{
+				// remaining length is at most 4 bytes; multiplier > 128^3 means an illegal 5th byte
+				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
 				if (++pos >= _readBuffer.length) return; // not enough data
 				digit = _readBuffer[pos];
 				header.length += ((digit & 127) * multiplier);
 				multiplier *= 128;
-				if (multiplier > 128*128*128) throw new PacketFormatException("Malformed remaining length");
 			} while ((digit & 128) != 0);
 
 			if (_readBuffer.length < header.length + pos + 1) return; // not enough data
