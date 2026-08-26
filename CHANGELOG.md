@@ -1,6 +1,9 @@
 vibe-mqtt changelog
 ===================
 
+#### v1.1.2
+- Fix client never reconnecting when the connection drops before the ConAck timer is armed (reconnect interval shorter than the 5s ConAck timeout left the client silently dead)
+
 #### v1.1.1
 - Fix race condition in reconnect where a stale listener/dispatcher task could tear down a freshly established connection
 - Fix remaining length decode rejecting valid 4-byte lengths (payloads > 2 MB); the guard now rejects only an illegal 5th byte (#41)
