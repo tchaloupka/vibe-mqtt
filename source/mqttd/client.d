@@ -751,7 +751,9 @@ unittest
 		import vibe.core.core: runTask;
 		import vibe.core.net: connectTCP;
 
-		if (_conAckTimer.pending)
+		// A pending ConAck timer means a connect attempt is in progress - unless we were
+		// disconnected since (then it's a leftover of a dead attempt and must not block the reconnect)
+		if (_conAckTimer.pending && !_disconnecting)
 		{
 			version(MqttDebug) logDebug("MQTT Broker already Connecting");
 			return;
@@ -768,6 +770,7 @@ unittest
 		//cleanup before reconnect
 		_readBuffer.clear();
 		if (_settings.cleanSession ) _session.clear();
+		stopTimer(_conAckTimer); // leftover of a dead attempt must not fire into this one
 		_disconnecting = false;
 		++_connectEpoch;
 
@@ -790,6 +793,13 @@ unittest
 			{
 				_stream = new StreamWrapper!TCPConnection(_con);
 			}
+			// Arm the ConAck timer before anything that can trigger disconnectImpl (listener seeing
+			// EOF, failed write of Connect...), so that the disconnect always stops it. Otherwise the
+			// timer would be armed after the reconnect was scheduled, the reconnect would bail on the
+			// pending timer and the timer itself would bail on _disconnecting - and the client would
+			// never reconnect again.
+			_conAckTimer.rearm(5.seconds);
+
 			_listener = runTask(&listener);
 			_dispatcher = runTask(&dispatcher);
 
@@ -811,7 +821,6 @@ unittest
 			}
 
 			this.send(con);
-			_conAckTimer.rearm(5.seconds);
 		}
 		catch (Exception ex)
 		{

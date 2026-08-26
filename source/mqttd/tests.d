@@ -436,3 +436,67 @@ unittest
 	testSimple!PingResp(0xd0);
 	testSimple!Disconnect(0xe0);
 }
+
+/// Reconnect must survive a connection dropped before the ConAck timer is armed
+unittest
+{
+	import core.atomic : atomicLoad, atomicStore;
+	import core.thread : Thread;
+	import core.time : msecs, seconds;
+	import std.conv : to;
+	import std.socket;
+	import vibe.core.core : exitEventLoop, runEventLoop, runTask, sleep;
+	import mqttd.client;
+
+	// fake broker: accepts the connection and drops it right away (no CONNACK)
+	auto server = new TcpSocket();
+	server.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
+	server.bind(new InternetAddress("127.0.0.1", InternetAddress.PORT_ANY));
+	server.listen(10);
+	immutable port = (cast(InternetAddress)server.localAddress).port;
+
+	shared bool stop;
+	auto thread = () @trusted
+		{
+			return new Thread(
+				{
+					while (!atomicLoad(stop))
+					{
+						try server.accept().close();
+						catch (SocketException) break;
+					}
+				}).start();
+		}();
+	void stopServer() @trusted
+	{
+		atomicStore(stop, true);
+		// wake up the blocking accept so the thread can exit
+		try new TcpSocket(new InternetAddress("127.0.0.1", port)).close();
+		catch (SocketException) {}
+		thread.join();
+		server.close();
+	}
+	scope (exit) stopServer();
+
+	auto settings = Settings();
+	settings.host = "127.0.0.1";
+	settings.port = port;
+	settings.reconnect = 100.msecs;
+
+	size_t disconnects;
+	settings.onDisconnect = (scope MqttClient) @safe { disconnects++; };
+
+	auto client = new MqttClient(settings);
+
+	runTask(
+		{
+			client.connect();
+			sleep(2.seconds);
+			client.disconnect();
+			exitEventLoop();
+		});
+	runEventLoop();
+
+	// with a broken reconnect the client goes silent after the first disconnect
+	assert(disconnects >= 5, "MQTT client stopped reconnecting after " ~ disconnects.to!string ~ " disconnect(s)");
+}
