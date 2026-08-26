@@ -488,10 +488,10 @@ unittest
 
 	auto client = new MqttClient(settings);
 
-	runTask(
+	runTask(() @safe nothrow
 		{
 			client.connect();
-			sleep(2.seconds);
+			try sleep(2.seconds); catch (Exception) {}
 			client.disconnect();
 			exitEventLoop();
 		});
